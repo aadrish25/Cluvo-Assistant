@@ -1,0 +1,12 @@
+agno
+ollama
+openai
+sqlalchemy
+networkx
+pyvis
+pandas
+reportlab
+fastapi
+asyncio
+websockets
+uvicorn
