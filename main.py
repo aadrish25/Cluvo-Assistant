@@ -41,7 +41,7 @@ def build_ws_response(final_event):
             "type":"assistant_message",
             "message":final_event["message"],
             "artifacts":{
-                "graph_html_paths":session_state.get("graph_html_paths") or [],
+                "graph_html_paths":session_state.get("graph_html_path") or [],
                 "summary_report_pdf_path":session_state.get("summary_report_pdf_path"),
                 "chart_data":session_state.get("chart_data"),
                 "map_data":session_state.get("map_data"),
