@@ -1,4 +1,5 @@
 from agno.team import Team,TeamMode
+from agno.run.team import RunCompletedEvent,RunContentEvent,ToolCallStartedEvent,RunErrorEvent
 from agno.db.sqlite import SqliteDb
 import sys
 from pathlib import Path
@@ -26,6 +27,21 @@ class InvestigationTeam:
         self.summary_agent = create_summary_agent()
         self.general_agent = create_general_agent()
         self.sqlite_db = memory_db
+        
+        
+        self._agent_status_labels = {
+            "text-to-sql-agent": "Querying the case database",
+            "graph-agent": "Mapping out the network",          # verify
+            "analytics-agent": "Crunching the numbers",         # verify
+            "summary-agent": "Putting together a summary",      # verify
+            "general-agent": "Thinking it through",             # verify
+        }
+
+        self._delegate_tool_names = {
+            "delegate_task_to_member",
+            "transfer_task_to_member",
+            "forward_task_to_member",
+        }
         
         self.team = Team(
                 model = gemma4_31b,
@@ -96,6 +112,70 @@ class InvestigationTeam:
             print(f"[INVESTIGATOR TEAM] Error in generating response: {e}")
             
             
+    async def team_run_stream(self,input:str,user_id:str,session_id:str):
+        try:
+            stream = self.team.arun(
+                input=input,
+                user_id=user_id,
+                session_id=session_id,
+                stream=True,
+                stream_events=True,
+            )
+            
+            final_response = None
+            
+            async for event in stream:
+                if isinstance(event,RunContentEvent):
+                    if event.content:
+                        yield {"type":"stream_chunk","content":event.content}
+                elif isinstance(event,ToolCallStartedEvent):
+                    tool_name = getattr(event.tool,"tool_name","") or ""
+                    tool_args = getattr(event.tool,"tool_args",{}) or {}
+                    
+                    if tool_name in self._delegate_tool_names:
+                        member_id = tool_args.get("member_id")
+                        task = tool_args.get("task")
+                        label = self._agent_status_labels.get(member_id,member_id or "a specialist agent")
+                        message = f"{label} — {task}" if task else f"{label}..."
+                        yield {"type":"status","message":message}
+                    else:
+                        yield {
+                        "type":"status",
+                        "message": f"Running {tool_name or 'a tool'}...",
+                        }
+                elif isinstance(event, RunErrorEvent):
+                    yield {"type": "error", "message": str(getattr(event, "error", "Something went wrong."))}
+                elif isinstance(event,RunCompletedEvent):
+                    final_response = event
+                    
+            if final_response is None:
+                return
+            
+            
+            for member_response in getattr(final_response, "member_responses", []) or []:
+                if member_response.agent_name == "Analytics Agent":
+                    analytics_output: AnalyticsResponse = member_response.content
+                    self.team.update_session_state(
+                        session_state_updates={
+                            "analysis_type": analytics_output.analysis_type,
+                            "analytics_answer": analytics_output.answer,
+                            "chart_data": analytics_output.chart.model_dump_json() if analytics_output.chart else None,
+                            "map_data": analytics_output.map.model_dump_json() if analytics_output.map else None,
+                            "table_data": analytics_output.table,
+                        },
+                        session_id=session_id,
+                    )
+            session_state = self.team.get_session_state(session_id=session_id)
+            yield {
+                "type": "assistant_message",
+                "message": final_response.content,
+                "session_state": session_state,
+            }
+        except Exception as e:
+            print(f"[INVESTIGATOR TEAM] Exception in streaming agent output: {e}")
+            
+            
+
 if __name__ == "__main__":
     team_obj = InvestigationTeam()
     

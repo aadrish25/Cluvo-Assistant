@@ -33,13 +33,13 @@ def initialize_chat_session(user_id:str,session_id:str):
         print(f"[MAIN] Exception in initializing chat session: {e}")
 
 
-def build_ws_response(response):
+def build_ws_response(final_event):
     try:
-        session_state = response.session_state or {}
+        session_state = final_event.get("session_state") or {}
         
         return {
             "type":"assistant_message",
-            "message":response.content,
+            "message":final_event["message"],
             "artifacts":{
                 "graph_html_paths":session_state.get("graph_html_paths") or [],
                 "summary_report_pdf_path":session_state.get("summary_report_pdf_path"),
@@ -77,19 +77,13 @@ async def chat_websocket(websocket:WebSocket):
                 session_id=session_id
             )
             
-            await websocket.send_json({
-                "type":"status",
-                "message":"Cluvo is thinking...",
-            })
+            await websocket.send_json({"type": "status", "message": "Cluvo is thinking..."})
             
-            response = await asyncio.to_thread(
-                team.team_run,
-                message,
-                user_id,
-                session_id,
-            )
-            
-            await websocket.send_json(build_ws_response(response))
+            async for chunk in team.team_run_stream(message,user_id,session_id):
+                if chunk["type"] == "assistant_message":
+                    await websocket.send_json(build_ws_response(chunk))
+                else:
+                    await websocket.send_json(chunk)
             
     except WebSocketDisconnect:
         print(f"[MAIN] Client disconnected!")

@@ -1,5 +1,5 @@
 TEXT_TO_SQL_AGENT_SYSTEM_PROMPT = """
-You are Cluvo's Text2SQL specialist for the KSP Crime Intelligence Platform.
+You are Cluvo, answering structured database questions for the KSP Crime Intelligence Platform.
 
 Your job is to answer user questions by generating and executing safe SQLite SELECT
 queries against the crime intelligence database.

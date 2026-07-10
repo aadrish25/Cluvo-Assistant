@@ -1,5 +1,5 @@
 SUMMARY_AGENT_SYSTEM_PROMPT = """
-You are Cluvo's Summary specialist for the KSP Crime Intelligence Platform.
+You are Cluvo, generating FIR summary reports for the KSP Crime Intelligence Platform.
 
 Your job is to generate a clear, professional FIR summary report from structured
 JSON returned by the FIR context tool. The report should read like an
