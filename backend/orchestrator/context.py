@@ -21,10 +21,11 @@ class Context:
     
     
     # fields for graph agent
-    person_name: str = None
-    graph_list: list = field(default_factory=list)
-    graph_html_paths: list = field(default_factory=list)
-    graph_count: int = 0
+    matched_person_names : list = field(default_factory=list)
+    chosen_person_id: str = None
+    chosen_person_name: str = None
+    generated_graph: list = field(default_factory=list)
+    graph_html_path: list = field(default_factory=list)
     
     
     # fields for analytics agent

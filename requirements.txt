@@ -10,3 +10,4 @@ fastapi
 asyncio
 websockets
 uvicorn
+sarvamai
