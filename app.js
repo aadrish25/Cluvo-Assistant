@@ -18,6 +18,11 @@ const state = {
   },
 };
 
+const voiceConfig = {
+  inputLang: "en-IN",
+  speechLang: "en-US",
+};
+
 const els = {
   connection: document.querySelector("#connection"),
   statusText: document.querySelector("#statusText"),
@@ -27,11 +32,15 @@ const els = {
   composer: document.querySelector("#composer"),
   messageInput: document.querySelector("#messageInput"),
   sendBtn: document.querySelector("#sendBtn"),
+  voiceBtn: document.querySelector("#voiceBtn"),
   reconnectBtn: document.querySelector("#reconnectBtn"),
   panelContent: document.querySelector("#panelContent"),
   panelTabs: document.querySelectorAll(".panel-tabs button"),
   promptButtons: document.querySelectorAll("[data-prompt]"),
 };
+
+let recognition = null;
+let isListening = false;
 
 function stableId(key) {
   const existing = localStorage.getItem(key);
@@ -39,6 +48,65 @@ function stableId(key) {
   const value = `${key}-${crypto.randomUUID()}`;
   localStorage.setItem(key, value);
   return value;
+}
+
+function getTextForBackend(text) {
+  return text;
+}
+
+function getTextForSpeech(text) {
+  return text;
+}
+
+function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    els.voiceBtn.disabled = true;
+    els.voiceBtn.title = "Voice input is not supported in this browser";
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = voiceConfig.inputLang;
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onstart = () => {
+    isListening = true;
+    els.voiceBtn.classList.add("active");
+    els.statusText.textContent = "Listening...";
+  };
+
+  recognition.onerror = () => {
+    isListening = false;
+    els.voiceBtn.classList.remove("active");
+    els.statusText.textContent = "Voice input unavailable";
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    els.voiceBtn.classList.remove("active");
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = Array.from(event.results)
+      .map((result) => result[0]?.transcript || "")
+      .join(" ")
+      .trim();
+
+    if (transcript) {
+      sendMessage(getTextForBackend(transcript));
+    }
+  };
+}
+
+function speak(text) {
+  if (!text || typeof window.speechSynthesis === "undefined") return;
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = voiceConfig.speechLang;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
 }
 
 const userId = stableId("cluvo-user");
@@ -212,12 +280,18 @@ function connect() {
     if (payload.type === "assistant_message") {
       clearChatStatus();
       if (!state.streamingNode) {
-      // no chunks arrived (e.g. tool-only run) — add the message normally
-      addMessage("assistant", payload.message || "Done.");
+        // no chunks arrived (e.g. tool-only run) — add the message normally
+        addMessage("assistant", payload.message || "Done.");
       }
       clearStreamingMessage();
       state.artifacts = normalizeArtifacts(payload.artifacts);
       els.statusText.textContent = "Connected";
+
+      const spokenText = getTextForSpeech(payload.message || "");
+      if (spokenText) {
+        speak(spokenText);
+      }
+
       renderPanel();
     }
   };
@@ -485,6 +559,20 @@ els.composer.addEventListener("submit", (event) => {
 
 els.reconnectBtn.addEventListener("click", connect);
 
+els.voiceBtn.addEventListener("click", () => {
+  if (!recognition) {
+    initVoice();
+  }
+
+  if (!recognition) return;
+
+  if (!isListening) {
+    recognition.start();
+  } else {
+    recognition.stop();
+  }
+});
+
 els.promptButtons.forEach((button) => {
   button.addEventListener("click", () => sendMessage(button.dataset.prompt));
 });
@@ -500,4 +588,5 @@ els.panelTabs.forEach((button) => {
 
 addMessage("assistant", "Cluvo is ready. Ask about FIRs, people, networks, trends, hotspots, or case reports.");
 renderPanel();
+initVoice();
 connect();
