@@ -6,6 +6,9 @@ const state = {
   socket: null,
   connection: "connecting",
   activePanel: "report",
+  statusNode: null,
+  streamingNode: null,
+  streamingText: "",
   artifacts: {
     graphHtmlPaths: [],
     pdfPath: null,
@@ -75,6 +78,65 @@ function addMessage(role, content) {
   els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });
 }
 
+function showChatStatus(content) {
+  const label = content || "Figuring";
+
+  if (!state.statusNode) {
+    const statusNode = document.createElement("article");
+    statusNode.className = "chat-status";
+    statusNode.innerHTML = `
+      <span class="chat-status-dot"></span>
+      <span class="chat-status-text"></span>
+    `;
+    els.transcript.appendChild(statusNode);
+    state.statusNode = statusNode;
+  }
+
+  state.statusNode.querySelector(".chat-status-text").textContent = label;
+  els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });
+}
+
+function clearChatStatus() {
+  if (!state.statusNode) return;
+  state.statusNode.remove();
+  state.statusNode = null;
+}
+
+function ensureStreamingMessage() {
+  if (state.streamingNode) return state.streamingNode;
+
+  clearChatStatus(); // stop showing the spinner once real content starts
+
+  const message = document.createElement("article");
+  message.className = "message assistant";
+  message.innerHTML = `
+    <div class="avatar">C</div>
+    <div class="bubble"><p></p></div>
+  `;
+  els.transcript.appendChild(message);
+  state.streamingNode = message;
+  state.streamingText = "";
+  return message;
+}
+
+function appendStreamChunk(content) {
+  const node = ensureStreamingMessage();
+  state.streamingText += content;
+
+  const safeLines = state.streamingText
+    .split("\n")
+    .map((line) => `<p>${escapeHtml(line || " ")}</p>`)
+    .join("");
+  node.querySelector(".bubble").innerHTML = safeLines;
+
+  els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });
+}
+
+function clearStreamingMessage() {
+  state.streamingNode = null;
+  state.streamingText = "";
+}
+
 function parseMaybeJson(value) {
   if (!value) return null;
   if (typeof value === "string") {
@@ -111,6 +173,10 @@ function normalizeArtifacts(raw) {
   };
 }
 
+function statusLabel(payload) {
+  return payload.message || payload.status || payload.event || payload.content || "Figuring";
+}
+
 function connect() {
   if (state.socket) state.socket.close();
   setConnection("connecting", "Connecting to Cluvo...");
@@ -125,21 +191,33 @@ function connect() {
   socket.onmessage = (event) => {
     const payload = JSON.parse(event.data);
 
+    if (payload.type == "stream_chunk"){
+      appendStreamChunk(payload.content || "");
+      return;
+    }
+
     if (payload.type === "status") {
-      els.statusText.textContent = payload.message || "Cluvo is thinking...";
+      if(!state.streamingNode) showChatStatus(statusLabel(payload));
       return;
     }
 
     if (payload.type === "error") {
+      clearChatStatus();
+      clearStreamingMessage();
       addMessage("assistant", payload.message || "Something went wrong.");
-      els.statusText.textContent = "Error";
+      els.statusText.textContent = "Connected";
       return;
     }
 
     if (payload.type === "assistant_message") {
+      clearChatStatus();
+      if (!state.streamingNode) {
+      // no chunks arrived (e.g. tool-only run) — add the message normally
       addMessage("assistant", payload.message || "Done.");
+      }
+      clearStreamingMessage();
       state.artifacts = normalizeArtifacts(payload.artifacts);
-      els.statusText.textContent = "Ready";
+      els.statusText.textContent = "Connected";
       renderPanel();
     }
   };
@@ -158,8 +236,9 @@ function sendMessage(text) {
   );
 
   addMessage("user", message);
+  showChatStatus("Figuring");
   els.messageInput.value = "";
-  els.statusText.textContent = "Sending...";
+  els.statusText.textContent = "Connected";
 }
 
 function emptyPanel(icon, title, text) {

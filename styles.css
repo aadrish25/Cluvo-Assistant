@@ -288,6 +288,35 @@ button {
   margin-bottom: 0;
 }
 
+.chat-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  width: fit-content;
+  max-width: min(620px, 100%);
+  margin: 8px 0 8px 48px;
+  padding: 8px 0;
+  color: #7a7f8a;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.chat-status-dot {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(81, 144, 216, 0.22);
+  border-top-color: #4c47ea;
+  border-radius: 999px;
+  animation: spinStatus 0.7s linear infinite;
+}
+
+@keyframes spinStatus {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 48px;
@@ -665,6 +694,10 @@ td {
   .transcript {
     min-height: 420px;
     padding: 16px;
+  }
+
+  .chat-status {
+    margin-left: 0;
   }
 
   .composer {
