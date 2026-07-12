@@ -5,6 +5,7 @@ class Context:
     user_id: str = None
     session_id: str = None
     user_msg: str = None
+    user_language: str = None
     
     # fields from SQL agent
     person_ids: list =field(default_factory=list)

@@ -2,6 +2,7 @@ from agno.team import Team,TeamMode
 from agno.run.team import RunCompletedEvent,RunContentEvent,ToolCallStartedEvent,RunErrorEvent
 from agno.db.sqlite import SqliteDb
 import sys
+import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -15,8 +16,12 @@ from backend.orchestrator.agents.graph_agent import create_graph_agent
 from backend.orchestrator.agents.analytics_agent import create_analytics_agent,AnalyticsResponse
 from backend.orchestrator.agents.summary_agent import create_summary_agent
 from backend.orchestrator.agents.general_agent import create_general_agent
+from backend.services.sarvam import SarvamTranslationLayer
 from dataclasses import asdict
 from backend.database import memory_db
+
+
+SENTENCE_END_RE = re.compile(r'(?<=[.!?।])\s+')  # ।  catches Hindi/Devanagari sentence-enders too
 
 
 class InvestigationTeam:
@@ -26,6 +31,7 @@ class InvestigationTeam:
         self.analytics_agent = create_analytics_agent()
         self.summary_agent = create_summary_agent()
         self.general_agent = create_general_agent()
+        self.translation_layer = SarvamTranslationLayer()
         self.sqlite_db = memory_db
         
         
@@ -63,18 +69,17 @@ class InvestigationTeam:
             )
             
     
-    def initialize_session(self,user_id:str,session_id:str):
+    def _safe_get_session_state(self,session_id:str)->dict:
         try:
-            initial_context = asdict(Context(user_id=user_id,session_id=session_id))
-            self.team.update_session_state(
-                session_state_updates=initial_context,
-                session_id=session_id
-            )
-            
-            return self.team.get_session_state(session_id=session_id)
-        
-        except Exception as e:
-            print(f"[INVESTIGATOR TEAM] Error in initializing session: {e}")
+            return self.team.get_session_state(session_id=session_id) or {}
+        except Exception:
+            return {}
+    
+    def initialize_session(self, user_id: str, session_id: str):
+        # Agno only creates the session row on the first arun()/run() call —
+        # we can't pre-seed state before that exists, so this is now just
+        # a safe check rather than a write.
+        return self._safe_get_session_state(session_id)
             
     
     def team_run(self,input:str,user_id:str,session_id:str):
@@ -111,11 +116,72 @@ class InvestigationTeam:
         except Exception as e:
             print(f"[INVESTIGATOR TEAM] Error in generating response: {e}")
             
-            
-    async def team_run_stream(self,input:str,user_id:str,session_id:str):
+    
+    async def team_run_stream_from_text(self,input:str,user_id:str,session_id:str):
         try:
+            session_state = self._safe_get_session_state(session_id=session_id) or {}
+            known_lang = session_state.get("user_language")
+            
+            print(f"[INVESTIGATOR TEAM] Known lang detected: {known_lang}")
+            
+            translated_text = await self.translation_layer.translate_text(
+                text=input,
+                source_lang=known_lang or "auto",
+                target_lang="en-IN",
+            ) or {}
+            
+            english_input = translated_text.get("translated_text")
+            if not english_input:
+                yield {"type": "error", "message": "Translation failed. Please try again."}
+                return
+            detected_lang = translated_text.get("source_language_code") or known_lang or "en-IN"
+            
+            async for chunk in self._run_pipeline(english_input, detected_lang, user_id, session_id):
+                yield chunk
+    
+        except Exception as e:
+            print(f"[INVESTIGATOR TEAM] Error in text translation: {e}")
+            yield {"type": "error", "message": "Translation failed. Please try again."}
+            
+    
+    async def team_run_stream_from_audio(self,audio_bytes:bytes,session_id:str,user_id:str,mime_type:str = "audio/webm"):
+        try:
+            stt_result = await self.translation_layer.speech_to_text_translate(audio_bytes=audio_bytes)
+            english_input = (stt_result or {}).get("transcript","")
+            detected_lang = (stt_result or {}).get("language_code","") or "en-IN"
+            
+            
+            if not english_input.strip():
+                yield {"type": "error", "message": "Couldn't make out what was said — try again?"}
+                return
+            
+            # show the recorded output in the frontend-> transcribed+translated
+            yield {"type":"transcript","text":english_input}
+            
+            async for chunk in self._run_pipeline(english_input, detected_lang, user_id, session_id):
+                yield chunk
+            
+        except Exception as e:
+            print(f"[INVESTIGATOR TEAM] Error in speech to text transcription: {e}")
+            yield {"type": "error", "message": "Voice processing failed. Please try again."}
+            
+            
+    async def _run_pipeline(self,english_input:str,target_lang:str,user_id:str,session_id:str):
+        try:
+            session_state = self._safe_get_session_state(session_id=session_id) or {}
+            
+            # detect if the user lang has changes mid conversation or not
+            if session_state.get("user_language") != target_lang:
+                try:
+                    self.team.update_session_state(
+                        session_state_updates={"user_language":target_lang},
+                        session_id=session_id,
+                    )
+                except Exception:
+                    pass
+            
             stream = self.team.arun(
-                input=input,
+                input=english_input,
                 user_id=user_id,
                 session_id=session_id,
                 stream=True,
@@ -123,11 +189,38 @@ class InvestigationTeam:
             )
             
             final_response = None
+            sentence_buffer = ""
             
             async for event in stream:
                 if isinstance(event,RunContentEvent):
-                    if event.content:
+                    if not event.content:
+                        continue
+                    
+                    # if the user speaks in english only, no need to go through translation complexity
+                    if target_lang == "en-IN":
                         yield {"type":"stream_chunk","content":event.content}
+                        continue
+                    
+                    sentence_buffer += event.content
+                    parts = SENTENCE_END_RE.split(sentence_buffer)
+                    
+                    if len(parts)>1:
+                        *complete,sentence_buffer = parts
+                        for sentence in complete:
+                            translated = await self.translation_layer.translate_text(
+                                text=sentence,source_lang="en-IN",target_lang=target_lang,
+                            ) or {}
+                            
+                            translated_sentence = translated.get("translated_text")
+                            
+                            if not translated_sentence:
+                                continue
+                            
+                            yield {"type": "stream_chunk", "content": translated_sentence + " "}
+                            
+                            audio = await self.translation_layer.synthesize_speech(text=translated_sentence,target_lang=target_lang,speaker="shubh") or {}
+                            if audio and audio.get("audios"):
+                                yield {"type": "audio_chunk", "audio": audio["audios"][0], "format": "wav"}
                 elif isinstance(event,ToolCallStartedEvent):
                     tool_name = getattr(event.tool,"tool_name","") or ""
                     tool_args = getattr(event.tool,"tool_args",{}) or {}
@@ -151,6 +244,20 @@ class InvestigationTeam:
             if final_response is None:
                 return
             
+            if target_lang != "en-IN" and sentence_buffer.strip():
+                translated = await self.translation_layer.translate_text(
+                    text=sentence_buffer,source_lang="en-IN",target_lang=target_lang
+                ) or {}
+
+                translated_sentence = translated.get("translated_text")
+                if translated_sentence:
+                    yield {"type":"stream_chunk","content":translated_sentence}
+                
+                    audio = await self.translation_layer.synthesize_speech(
+                    text=translated_sentence, target_lang=target_lang, speaker="shubh",
+                    ) or {}
+                    if audio and audio.get("audios"):
+                        yield {"type": "audio_chunk", "audio": audio["audios"][0], "format": "wav"}
             
             for member_response in getattr(final_response, "member_responses", []) or []:
                 if member_response.agent_name == "Analytics Agent":
@@ -165,7 +272,9 @@ class InvestigationTeam:
                         },
                         session_id=session_id,
                     )
-            session_state = self.team.get_session_state(session_id=session_id)
+                    
+            print(f"[INVESTIGATOR TEAM] User lang: {self._safe_get_session_state(session_id=session_id).get("user_language")}")
+            session_state = self._safe_get_session_state(session_id=session_id)
             yield {
                 "type": "assistant_message",
                 "message": final_response.content,

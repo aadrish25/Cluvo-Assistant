@@ -1,4 +1,4 @@
-import asyncio
+import base64
 from pathlib import Path
 from fastapi import FastAPI,WebSocket,WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -41,7 +41,7 @@ def build_ws_response(final_event):
             "type":"assistant_message",
             "message":final_event["message"],
             "artifacts":{
-                "graph_html_paths":session_state.get("graph_html_path") or [],
+                "graph_html_path":session_state.get("graph_html_path") or [],
                 "summary_report_pdf_path":session_state.get("summary_report_pdf_path"),
                 "chart_data":session_state.get("chart_data"),
                 "map_data":session_state.get("map_data"),
@@ -61,14 +61,14 @@ async def chat_websocket(websocket:WebSocket):
         while True:
             payload = await websocket.receive_json()
             
+            msg_type = payload.get("type","message")
             user_id = payload.get("user_id")
             session_id = payload.get("session_id")
-            message = payload.get("message")
 
-            if not user_id or not session_id or not message:
+            if not user_id or not session_id:
                 await websocket.send_json({
                     "type": "error",
-                    "message": "user_id, session_id, and message are required.",
+                    "message": "user_id and session_id are required.",
                 })
                 continue
             
@@ -79,7 +79,32 @@ async def chat_websocket(websocket:WebSocket):
             
             await websocket.send_json({"type": "status", "message": "Cluvo is thinking..."})
             
-            async for chunk in team.team_run_stream(message,user_id,session_id):
+            if msg_type == "voice_message":
+                audio_b64 = payload.get("audio")
+                if not audio_b64:
+                    await websocket.send_json({"type": "error", "message": "audio is required."})
+                    continue
+                
+                audio_bytes = base64.b64decode(audio_b64)
+                stream = team.team_run_stream_from_audio(
+                    audio_bytes=audio_bytes,
+                    user_id=user_id,
+                    session_id=session_id,
+                    mime_type=payload.get("mime_type","audio/webm"),
+                )
+            else:
+                message = payload.get("message")
+                if not message:
+                    await websocket.send_json({"type": "error", "message": "message is required."})
+                    continue
+                
+                stream = team.team_run_stream_from_text(
+                    input=message,
+                    user_id=user_id,
+                    session_id=session_id
+                )
+            
+            async for chunk in stream:
                 if chunk["type"] == "assistant_message":
                     await websocket.send_json(build_ws_response(chunk))
                 else:
