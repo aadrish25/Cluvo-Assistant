@@ -607,7 +607,7 @@ Expected outgoing payload:
   "type": "assistant_message",
   "message": "...",
   "artifacts": {
-    "graph_html_paths": [],
+    "graph_html_path": [],
     "summary_report_pdf_path": "reports/KSP_2023_0042_summary_report.pdf",
     "chart_data": null,
     "map_data": null,
@@ -628,7 +628,7 @@ Tasks:
 - Render status messages such as `Cluvo is thinking...`.
 - Render normal assistant messages.
 - Render PDF links from `summary_report_pdf_path`.
-- Render graph links or embeds from `graph_html_paths`.
+- Render graph links or embeds from `graph_html_path`.
 - Render analytics charts from `chart_data`.
 - Render hotspot maps from `map_data`.
 - Render result tables from `table_data`.
@@ -743,7 +743,7 @@ The next phase is the frontend assistant experience.
 | 3 | Connect to `ws://127.0.0.1:8000/ws/chat` |
 | 4 | Render user messages, assistant messages, and status messages |
 | 5 | Render PDF report links from `summary_report_pdf_path` |
-| 6 | Render graph HTML links or iframe embeds from `graph_html_paths` |
+| 6 | Render graph HTML links or iframe embeds from `graph_html_path` |
 | 7 | Render analytics charts from `chart_data` |
 | 8 | Render map markers from `map_data` |
 | 9 | Render analytics/result tables from `table_data` |

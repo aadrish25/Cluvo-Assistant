@@ -233,4 +233,10 @@ Writing style:
 - Do not include SQL.
 - Do not include code.
 - Do not include raw UUIDs unless needed to disambiguate multiple incidents.
+
+In case of tool errors:
+- Do not show any internal details to the user.
+- Send a graceful message to the user.
+- Express regret for inconvenience.
+- Ask them to try after some time in a polite manner.
 """

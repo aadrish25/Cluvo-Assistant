@@ -2,24 +2,22 @@ import httpx
 import os
 import asyncio
 from sarvamai import AsyncSarvamAI,SarvamAI
+from backend.config import SARVAM_API_KEY,SARVAM_STT_ENDPOINT,SARVAM_TTS_ENDPOINT
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-SARVAM_BASE_URL = "https://api.sarvam.ai"
-
-
 class SarvamTranslationLayer:
     def __init__(self):
         self.sarvam_client = AsyncSarvamAI(
-            api_subscription_key=os.getenv("SARVAM_API_KEY"),
+            api_subscription_key=SARVAM_API_KEY,
             follow_redirects=True
         )
         
-        self.stt_endpoint = f"{SARVAM_BASE_URL}/speech-to-text"
-        self.tts_endpoint = f"{SARVAM_BASE_URL}/text-to-speech"
-        self.headers = {"api-subscription-key":os.getenv("SARVAM_API_KEY")}
+        self.stt_endpoint = SARVAM_STT_ENDPOINT
+        self.tts_endpoint = SARVAM_TTS_ENDPOINT
+        self.headers = {"api-subscription-key":SARVAM_API_KEY}
         
         
     async def translate_text(self,text:str,target_lang:str,source_lang:str = "auto"):

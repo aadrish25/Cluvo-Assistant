@@ -3,17 +3,17 @@ from pathlib import Path
 from typing import Any,Literal
 from pydantic import BaseModel,Field
 from agno.agent import Agent
+from agno.tools.reasoning import ReasoningTools
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.append(str(PROJECT_ROOT))
-DATABASE_PATH = BASE_DIR / "database" / "ksp_crime_platform.db"
 
 from backend.database import create_connection
 from backend.orchestrator.prompts.analytics_agent_prompt import ANALYTICS_AGENT_SYSTEM_PROMPT
+from backend.config import DEBUG_MODE
 from backend.database import memory_db
 from backend.orchestrator.llm import gemma4_31b
-import pandas as pd
 
 
 
@@ -145,6 +145,10 @@ def crime_count_by_district():
         
     except Exception as e:
         print(f"[ANALYTICS AGENT] Error in generating crime count by district: {e}")
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
         
         
 def monthly_crime_trend():
@@ -183,7 +187,10 @@ def monthly_crime_trend():
     
     except Exception as e:
         print(f"[ANALYTICS AGENT] Error in generating monthly crime trend: {e}")
-        
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
         
 def crime_type_breakdown():
     """
@@ -197,28 +204,33 @@ def crime_type_breakdown():
         sorted highest first. Use for crime-type distribution and most common
         crime type questions.
     """
-
-    crime_type_query = """
-        SELECT
-            ct.crime_name,
-            ct.category,
-            COUNT(*) AS incident_count
-        FROM CrimeIncident ci
-        JOIN CrimeType ct ON ct.crime_type_id = ci.crime_type_id
-        GROUP BY ct.crime_type_id, ct.crime_name, ct.category
-        ORDER BY incident_count DESC;
-        """
+    try:
+        crime_type_query = """
+            SELECT
+                ct.crime_name,
+                ct.category,
+                COUNT(*) AS incident_count
+            FROM CrimeIncident ci
+            JOIN CrimeType ct ON ct.crime_type_id = ci.crime_type_id
+            GROUP BY ct.crime_type_id, ct.crime_name, ct.category
+            ORDER BY incident_count DESC;
+            """
+            
+        conn = create_connection()
+        cursor = conn.cursor()
         
-    conn = create_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(crime_type_query)
-    rows = cursor.fetchall()
-    
-    # print(f"[ANALYTICS AGENT] {[dict(row) for row in rows]}")
+        cursor.execute(crime_type_query)
+        rows = cursor.fetchall()
         
-    return [dict(row) for row in rows]
-
+        # print(f"[ANALYTICS AGENT] {[dict(row) for row in rows]}")
+            
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[ANALYTICS AGENT] Exception in crime type breakdown: {e}")
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
 
 
 def crime_category_breakdown():
@@ -234,26 +246,32 @@ def crime_category_breakdown():
         breakdowns.
     """
 
-    crime_category_query = """
-    SELECT
-        ct.category,
-        COUNT(*) AS incident_count
-    FROM CrimeIncident ci
-    JOIN CrimeType ct ON ct.crime_type_id = ci.crime_type_id
-    GROUP BY ct.category
-    ORDER BY incident_count DESC;
-    """
-    
-    conn = create_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(crime_category_query)
-    rows = cursor.fetchall()
-    
-    # print(f"[ANALYTICS AGENT] {[dict(row) for row in rows]}")
-    
-    return [dict(row) for row in rows]
-
+    try:
+        crime_category_query = """
+        SELECT
+            ct.category,
+            COUNT(*) AS incident_count
+        FROM CrimeIncident ci
+        JOIN CrimeType ct ON ct.crime_type_id = ci.crime_type_id
+        GROUP BY ct.category
+        ORDER BY incident_count DESC;
+        """
+        
+        conn = create_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(crime_category_query)
+        rows = cursor.fetchall()
+        
+        # print(f"[ANALYTICS AGENT] {[dict(row) for row in rows]}")
+        
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[ANALYTICS AGENT] Exception in crime category breakdwon: {e}")
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
 
 
 def crime_hotspots():
@@ -269,39 +287,45 @@ def crime_hotspots():
         count. Use for hotspot maps and high-crime location analysis.
     """
 
-    crime_hotspot_query = """
-    SELECT
-        l.location_id,
-        l.location_name,
-        l.district,
-        l.city,
-        l.latitude,
-        l.longitude,
-        COUNT(*) AS incident_count,
-        ROUND(AVG(ci.severity), 2) AS avg_severity
-    FROM CrimeIncident ci
-    JOIN Location l ON l.location_id = ci.location_id
-    GROUP BY
-        l.location_id,
-        l.location_name,
-        l.district,
-        l.city,
-        l.latitude,
-        l.longitude
-    ORDER BY incident_count DESC;
-    """
-    
-    conn = create_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(crime_hotspot_query)
-    
-    rows = cursor.fetchall()
-    
-    print(f"[ANALYTICS AGENT] {[dict(row) for row in rows]}")   
-    
-    return [dict(row) for row in rows] 
-
+    try:
+        crime_hotspot_query = """
+        SELECT
+            l.location_id,
+            l.location_name,
+            l.district,
+            l.city,
+            l.latitude,
+            l.longitude,
+            COUNT(*) AS incident_count,
+            ROUND(AVG(ci.severity), 2) AS avg_severity
+        FROM CrimeIncident ci
+        JOIN Location l ON l.location_id = ci.location_id
+        GROUP BY
+            l.location_id,
+            l.location_name,
+            l.district,
+            l.city,
+            l.latitude,
+            l.longitude
+        ORDER BY incident_count DESC;
+        """
+        
+        conn = create_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(crime_hotspot_query)
+        
+        rows = cursor.fetchall()
+        
+        print(f"[ANALYTICS AGENT] {[dict(row) for row in rows]}")   
+        
+        return [dict(row) for row in rows] 
+    except Exception as e:
+        print(f"[ANALYTICS AGENT] Exception in crime hotspot location: {e}")
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
 
 
 def top_repeat_offenders(limit: int = 10):
@@ -318,28 +342,35 @@ def top_repeat_offenders(limit: int = 10):
         and most frequent accused questions.
     """
 
-    repeat_offenders_query = """
-    SELECT
-        p.person_id,
-        p.first_name || ' ' || p.last_name AS person_name,
-        COUNT(DISTINCT cp.incident_id) AS accused_incident_count
-    FROM CrimeParticipant cp
-    JOIN Person p ON p.person_id = cp.person_id
-    WHERE cp.role = 'Accused'
-    GROUP BY p.person_id, person_name
-    ORDER BY accused_incident_count DESC
-    LIMIT ?;
-    """
-    
-    conn = create_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(repeat_offenders_query,(limit,))
-    rows = cursor.fetchall()
-    
-    # print(f"[ANALYTICS AGENT] {[dict(row) for row in rows]}")
-    
-    return [dict(row) for row in rows]
+    try:
+        repeat_offenders_query = """
+        SELECT
+            p.person_id,
+            p.first_name || ' ' || p.last_name AS person_name,
+            COUNT(DISTINCT cp.incident_id) AS accused_incident_count
+        FROM CrimeParticipant cp
+        JOIN Person p ON p.person_id = cp.person_id
+        WHERE cp.role = 'Accused'
+        GROUP BY p.person_id, person_name
+        ORDER BY accused_incident_count DESC
+        LIMIT ?;
+        """
+        
+        conn = create_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(repeat_offenders_query,(limit,))
+        rows = cursor.fetchall()
+        
+        # print(f"[ANALYTICS AGENT] {[dict(row) for row in rows]}")
+        
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[ANALYTICS AGENT] Exception in top repeat offenders: {e}")
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
 
 
 # define the analytics agent finally
@@ -357,16 +388,14 @@ def create_analytics_agent():
               crime_category_breakdown,
               crime_hotspots,
               top_repeat_offenders,
+              ReasoningTools(add_instructions=True),
           ],
           output_schema=AnalyticsResponse,
-          reasoning = True,
           db=memory_db,
-          reasoning_min_steps = 3,
-          reasoning_max_steps = 7,
           add_history_to_context=False,
           add_session_state_to_context=True,
-          telemetry=True,
-          debug_mode = True
+          telemetry=DEBUG_MODE,
+          debug_mode = DEBUG_MODE
         )
     except Exception as e:
         print(f"[ANALYTICS AGENT] Error in creating analytics agent: {e}")

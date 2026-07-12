@@ -1,5 +1,6 @@
 from agno.agent import Agent
 from agno.run import RunContext
+from agno.tools.reasoning import ReasoningTools
 import re
 import sys
 from pathlib import Path
@@ -14,10 +15,8 @@ sys.path.append(str(PROJECT_ROOT))
 from backend.database import create_connection
 from backend.orchestrator.llm import gemma4_31b
 from backend.orchestrator.prompts.summary_agent_prompt import SUMMARY_AGENT_SYSTEM_PROMPT
+from backend.config import REPORTS_DIR,DEBUG_MODE
 from backend.database import memory_db
-
-REPORT_DIR = BASE_DIR / "reports"
-REPORT_DIR.mkdir(parents=True,exist_ok=True)
 
 
 # build fir context
@@ -233,6 +232,10 @@ def build_fir_context(fir_number:str,run_context:RunContext):
         
     except Exception as e:
         print(f"[SUMMARY AGENT] Exception occured: {e}")
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
         
 
 # saving to pdf
@@ -240,7 +243,7 @@ def save_summary_report_pdf(run_context:RunContext,report_text:str) -> str:
     try:
         fir_number = run_context.session_state["summary_fir_number"]
         safe_fir = fir_number.replace("/","_")
-        output_path = REPORT_DIR / f"{safe_fir}_summary_report.pdf"
+        output_path = REPORTS_DIR / f"{safe_fir}_summary_report.pdf"
         
         doc = SimpleDocTemplate(str(output_path),pagesize=A4)
         styles = getSampleStyleSheet()
@@ -273,6 +276,10 @@ def save_summary_report_pdf(run_context:RunContext,report_text:str) -> str:
     
     except Exception as e:
         print(f"[SUMMARY AGENT] Error in report pdf generation: {e}")
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
 
 
 # create the FIR summary agent
@@ -285,16 +292,14 @@ def create_summary_agent():
           system_message = SUMMARY_AGENT_SYSTEM_PROMPT,
           tools = [
               build_fir_context,
-              save_summary_report_pdf
+              save_summary_report_pdf,
+              ReasoningTools(add_instructions=True),
           ],
-          reasoning = True,
           db=memory_db,
-          reasoning_min_steps = 3,
-          reasoning_max_steps = 7,
           add_history_to_context=False,
           add_session_state_to_context=True,
-          telemetry=True,
-          debug_mode = True
+          telemetry=DEBUG_MODE,
+          debug_mode = DEBUG_MODE
         )
     except Exception as e:
         print(f"[SUMMARY AGENT] Error in creating summary agent: {e}")

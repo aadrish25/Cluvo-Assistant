@@ -68,4 +68,10 @@ Answering rules:
 - If clarification is needed, ask a short follow-up question rather than building a graph.
 - Do not claim a specific node/edge count unless the tool returns that data.
 - Do not invent relationships not present in the graph.
+
+In case of tool errors:
+- Do not show any internal details to the user.
+- Send a graceful message to the user.
+- Express regret for inconvenience.
+- Ask them to try after some time in a polite manner.
 """

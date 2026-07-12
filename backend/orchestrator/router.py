@@ -1,5 +1,6 @@
 from agno.team import Team,TeamMode
 from agno.run.team import RunCompletedEvent,RunContentEvent,ToolCallStartedEvent,RunErrorEvent
+from agno.tools.reasoning import ReasoningTools
 from agno.db.sqlite import SqliteDb
 import sys
 import re
@@ -17,6 +18,7 @@ from backend.orchestrator.agents.analytics_agent import create_analytics_agent,A
 from backend.orchestrator.agents.summary_agent import create_summary_agent
 from backend.orchestrator.agents.general_agent import create_general_agent
 from backend.services.sarvam import SarvamTranslationLayer
+from backend.config import AGENT_STATUS_LABELS,DELEGATE_TOOL_NAMES,DEBUG_MODE
 from dataclasses import asdict
 from backend.database import memory_db
 
@@ -35,19 +37,9 @@ class InvestigationTeam:
         self.sqlite_db = memory_db
         
         
-        self._agent_status_labels = {
-            "text-to-sql-agent": "Querying the case database",
-            "graph-agent": "Mapping out the network",          # verify
-            "analytics-agent": "Crunching the numbers",         # verify
-            "summary-agent": "Putting together a summary",      # verify
-            "general-agent": "Thinking it through",             # verify
-        }
+        self._agent_status_labels = AGENT_STATUS_LABELS
 
-        self._delegate_tool_names = {
-            "delegate_task_to_member",
-            "transfer_task_to_member",
-            "forward_task_to_member",
-        }
+        self._delegate_tool_names = DELEGATE_TOOL_NAMES
         
         self.team = Team(
                 model = gemma4_31b,
@@ -56,16 +48,17 @@ class InvestigationTeam:
                 system_message = ROUTER_AGENT_SYSTEM_PROMPT,
                 mode = TeamMode.coordinate,
                 members = [self.sql_agent,self.graph_agent,self.analytics_agent,self.summary_agent,self.general_agent],
+                tools=[ReasoningTools(add_instructions=True)],
                 session_state=asdict(Context()),
                 add_session_state_to_context=True,
                 update_memory_on_run=True,
                 enable_agentic_memory=True,
                 enable_agentic_state=True,
                 add_history_to_context=True,
-                num_history_runs=4,
+                num_history_runs=5,
                 db=self.sqlite_db,
-                telemetry=True,
-                debug_mode=True,
+                telemetry=DEBUG_MODE,
+                debug_mode=DEBUG_MODE,
             )
             
     
@@ -120,21 +113,40 @@ class InvestigationTeam:
     async def team_run_stream_from_text(self,input:str,user_id:str,session_id:str):
         try:
             session_state = self._safe_get_session_state(session_id=session_id) or {}
-            known_lang = session_state.get("user_language")
+            user_lang = session_state.get("user_language")
             
-            print(f"[INVESTIGATOR TEAM] Known lang detected: {known_lang}")
+            print(f"[INVESTIGATOR TEAM] User lang detected: {user_lang}")
             
-            translated_text = await self.translation_layer.translate_text(
-                text=input,
-                source_lang=known_lang or "auto",
-                target_lang="en-IN",
-            ) or {}
             
-            english_input = translated_text.get("translated_text")
-            if not english_input:
-                yield {"type": "error", "message": "Translation failed. Please try again."}
-                return
-            detected_lang = translated_text.get("source_language_code") or known_lang or "en-IN"
+            # Pure ASCII input is never native-script Indian-language text — only
+            # possibly romanized, which we've already decided not to solve. Skip
+            # translation entirely: avoids the exact "English sentence with an
+            # Indian-origin name auto-detected as the wrong language" failure,
+            # and saves a network call for the common English case.
+            if input.isascii():
+                # Pure ASCII text is often just a proper noun (a name, a case
+                # number) typed in Latin script mid-conversation — it does NOT
+                # mean the user switched to English. Keep whatever language this
+                # session was already using; only default to English if this is
+                # a brand-new session with no established language yet.
+                english_input = input
+                detected_lang = user_lang or "en-IN"
+                # session_state["user_language"] = detected_lang
+            else:
+                translated_text = await self.translation_layer.translate_text(
+                    text=input,
+                    source_lang="auto",
+                    target_lang="en-IN",
+                ) or {}
+            
+            
+                english_input = translated_text.get("translated_text",input)
+                    
+                if not english_input:
+                    yield {"type": "error", "message": "Translation failed. Please try again."}
+                    return
+                detected_lang = translated_text.get("source_language_code") or user_lang or "en-IN"
+                session_state["user_language"] = detected_lang
             
             async for chunk in self._run_pipeline(english_input, detected_lang, user_id, session_id):
                 yield chunk
@@ -146,14 +158,44 @@ class InvestigationTeam:
     
     async def team_run_stream_from_audio(self,audio_bytes:bytes,session_id:str,user_id:str,mime_type:str = "audio/webm"):
         try:
+            session_state = self._safe_get_session_state(session_id=session_id) or {}
             stt_result = await self.translation_layer.speech_to_text_translate(audio_bytes=audio_bytes)
             english_input = (stt_result or {}).get("transcript","")
             detected_lang = (stt_result or {}).get("language_code","") or "en-IN"
             
+            # session_state["user_language"] = detected_lang
+            
+            print(f"[INVESTIGATION TEAM] Detected lang in this run: {detected_lang}")
             
             if not english_input.strip():
                 yield {"type": "error", "message": "Couldn't make out what was said — try again?"}
                 return
+            
+            # A short, ASCII-only utterance (a name, a case number) shouldn't flip
+            # the whole conversation's language — same reasoning as the text path.
+            # Only trust the freshly-detected language when there's enough real
+            # content to judge from; otherwise stick with the session's established
+            # language.
+            
+            user_lang = session_state.get("user_language")
+            
+            print(f"[INVESTIGATOR TEAM] Until now user has been speaking in lang : {user_lang} ")
+            
+            word_count = len(english_input.split())
+            # Only distrust a short/ambiguous utterance when Sarvam falls back to en-IN
+            # specifically — that's the direction we've seen misfire on short names/
+            # phrases. A confident detection of any OTHER specific language (Tamil,
+            # Kannada, etc.) has real phonetic signal behind it and should be trusted,
+            # even for a single word — otherwise the user can never actually switch
+            # languages mid-conversation.
+            if (
+                user_lang
+                and user_lang != "en-IN"
+                and detected_lang == "en-IN"
+                and english_input.isascii()
+                and word_count <= 3
+            ):
+                detected_lang = user_lang
             
             # show the recorded output in the frontend-> transcribed+translated
             yield {"type":"transcript","text":english_input}
@@ -168,9 +210,9 @@ class InvestigationTeam:
             
     async def _run_pipeline(self,english_input:str,target_lang:str,user_id:str,session_id:str):
         try:
-            session_state = self._safe_get_session_state(session_id=session_id) or {}
+            session_state = self._safe_get_session_state(session_id=session_id) or {"user_id":user_id,"session_id":session_id}
             
-            # detect if the user lang has changes mid conversation or not
+            # detect if the user lang has changed mid conversation or not
             if session_state.get("user_language") != target_lang:
                 try:
                     self.team.update_session_state(
@@ -184,9 +226,18 @@ class InvestigationTeam:
                 input=english_input,
                 user_id=user_id,
                 session_id=session_id,
+                session_state={
+                    "user_id":user_id,
+                    "session_id":session_id,
+                    "user_language":target_lang,
+                },
                 stream=True,
                 stream_events=True,
             )
+            
+            # session_state["user_language"] = target_lang
+            
+            print(f"[INVESTIGATOR TEAM] Session state after team run : {session_state}")
             
             final_response = None
             sentence_buffer = ""
@@ -273,7 +324,7 @@ class InvestigationTeam:
                         session_id=session_id,
                     )
                     
-            print(f"[INVESTIGATOR TEAM] User lang: {self._safe_get_session_state(session_id=session_id).get("user_language")}")
+            print(f"[INVESTIGATOR TEAM] User lang: {self._safe_get_session_state(session_id=session_id).get('user_language')}")
             session_state = self._safe_get_session_state(session_id=session_id)
             yield {
                 "type": "assistant_message",

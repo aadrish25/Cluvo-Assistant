@@ -1,5 +1,6 @@
 from agno.agent import Agent
 from agno.run import RunContext
+from agno.tools.reasoning import ReasoningTools
 from pathlib import Path
 import re
 import sys
@@ -8,11 +9,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.append(str(PROJECT_ROOT))
 
-DATABASE_PATH = BASE_DIR / "database" / "ksp_crime_platform.db"
-GRAPH_ARTIFACT = BASE_DIR / "graph_artifacts"
-GRAPH_ARTIFACT.mkdir(parents=True,exist_ok=True)
 
 from backend.orchestrator.prompts.graph_agent_prompt import GRAPH_AGENT_SYSTEM_PROMPT
+from backend.config import GRAPH_DIR,DEBUG_MODE
 from backend.orchestrator.llm import gemma4_31b
 from backend.database import create_connection
 from backend.database import memory_db
@@ -46,13 +45,17 @@ def find_matching_person(run_context:RunContext,person_name:str):
     
     except Exception as e:
         print(f"[GRAPH AGENT] Exception in finding matching persons: {e}")
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
         
         
         
 
 
 # tool to make primary person node -> the node around whom the network is centered
-def create_network_centered_around_person(run_context:RunContext,person_id:str):
+def create_network_centered_around_person(run_context:RunContext,person_id:str = None):
     """
     Build and save a person-centered NetworkX graph for one resolved person.
 
@@ -71,10 +74,17 @@ def create_network_centered_around_person(run_context:RunContext,person_id:str):
     try:
         conn = create_connection()
         cursor = conn.cursor()
-
         
-        # add the person_name to context
-        run_context.session_state["chosen_person_id"] = person_id
+        state_ids = (run_context.session_state or {}).get("person_ids") or []
+        if len(state_ids) == 1:
+            person_id = state_ids[0]
+            run_context.session_state["chosen_person_id"] = person_id
+        elif not person_id:
+            return {
+                "type": "error",
+                "message": "No single resolved person_id available.Resolve the person first."
+            }
+            
         
         person_graph_list = [] # in case there are multiple persons with the same name
 
@@ -463,7 +473,7 @@ def create_network_centered_around_person(run_context:RunContext,person_id:str):
             )
  
         safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", chosen_person_name).strip("_")
-        file_path = GRAPH_ARTIFACT / f"{safe_name}_{person_id[:10]}_network.html"
+        file_path = GRAPH_DIR / f"{safe_name}_{person_id[:10]}_network.html"
  
         # Defensive: don't assume the key already exists as a list
         run_context.session_state.setdefault("graph_html_path", []).append(str(file_path))
@@ -524,7 +534,7 @@ def save_person_network_html(run_context:RunContext):
                 title=str(attrs),
             )
 
-        file_path = GRAPH_ARTIFACT / f"{person_name}_network.html"
+        file_path = GRAPH_DIR / f"{person_name}_network.html"
         
         run_context.session_state["graph_html_path"].append(str(file_path))
                         
@@ -548,15 +558,13 @@ def create_graph_agent():
           tools = [
               find_matching_person,
               create_network_centered_around_person,
+              ReasoningTools(add_instructions=True)
           ],
-          reasoning = True,
           db=memory_db,
-          reasoning_min_steps = 3,
-          reasoning_max_steps = 7,
           add_history_to_context=False,
           add_session_state_to_context=True,
-          telemetry=True,
-          debug_mode = True
+          telemetry=DEBUG_MODE,
+          debug_mode = DEBUG_MODE
         )
     except Exception as e:
         print(f"[GRAPH AGENT] Error in creating graph agent: {e}")

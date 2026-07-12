@@ -10,10 +10,11 @@ sys.path.append(str(PROJECT_ROOT))
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 # print(f"[SQL AGENT] BASE_DIR: {BASE_DIR}")
-SQL_AGENT_DOC_DIR = BASE_DIR / "AgentDocs" / "Text2SQL" 
-DATABASE_PATH = BASE_DIR / "database" / "ksp_crime_platform.db"
 
+from backend.config import SQL_AGENT_DOC_DIR,DEBUG_MODE
+from agno.tools.reasoning import ReasoningTools
 from backend.orchestrator.llm import gemma4_31b
+from backend.database import create_connection
 from backend.orchestrator.prompts.text_to_sql_agent import TEXT_TO_SQL_AGENT_SYSTEM_PROMPT
 from backend.database import memory_db
 
@@ -35,7 +36,10 @@ def read_table_catalog():
             return f.read()
     except Exception as e:
         print(f"[SQL AGENT]Error reading table catalog: {e}")
-        return ""
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
     
     
 # tool to read table schema
@@ -67,7 +71,10 @@ def get_table_schema(table_name:str):
     
     except Exception as e:
         print(f"[SQL AGENT]Error reading table schema for {table_name}: {e}")
-        return ""
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
     
     
 # generate table schemas
@@ -93,7 +100,10 @@ def get_table_schemas(table_names:list):
     
     except Exception as e:
         print(f"[SQL AGENT]Error reading table schemas: {e}")
-        return ""
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
     
 
 # execute sql query
@@ -111,7 +121,7 @@ def execute_sql_query(run_context:RunContext,query:str):
         fails, execution fails, or the query has no matching rows.
     """
     try:
-        conn = sqlite3.connect(DATABASE_PATH)
+        conn = create_connection()
         cursor = conn.cursor()
         
         cleaned_query = query.strip().rstrip(";").strip()
@@ -154,10 +164,13 @@ def execute_sql_query(run_context:RunContext,query:str):
                 
         run_context.session_state["last_sql_query"] = cleaned_query
         
-        return results
+        return [dict(row) for row in results]
     except Exception as e:
         print(f"[SQL AGENT]Error executing SQL query: {e}")
-        return []
+        return {
+            "type":"error",
+            "message":"Ran into an unknown error."
+        }
 
 
 
@@ -173,15 +186,13 @@ def create_sql_agent()->Agent:
               read_table_catalog,
               get_table_schemas,
               execute_sql_query,
+              ReasoningTools(add_instructions=True),
           ],
-          reasoning = True,
           db=memory_db,
-          reasoning_min_steps = 3,
-          reasoning_max_steps = 7,
           add_history_to_context=False,
           add_session_state_to_context=True,
-          telemetry=True,
-          debug_mode = True
+          telemetry=DEBUG_MODE,
+          debug_mode = DEBUG_MODE,
         )
         
     except Exception as e:

@@ -3,14 +3,20 @@ from pathlib import Path
 from fastapi import FastAPI,WebSocket,WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from backend.orchestrator.router import InvestigationTeam
-
-Path("reports").mkdir(parents=True,exist_ok=True)
-Path("graph_artifacts").mkdir(parents=True,exist_ok=True)
+from fastapi.middleware.cors import CORSMiddleware
+from backend.config import REPORTS_DIR,GRAPH_DIR,LISTEN_PORT
 
 # create the fast api app - Cluvo
 app = FastAPI(title="Cluvo")
-app.mount("/reports", StaticFiles(directory="reports"), name="reports")
-app.mount("/graph_artifacts", StaticFiles(directory="graph_artifacts"), name="graph_artifacts")
+app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
+app.mount("/graph_artifacts", StaticFiles(directory=str(GRAPH_DIR)), name="graph_artifacts")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 team = InvestigationTeam()
 initialized_sessions = set()

@@ -1,11 +1,10 @@
 import sqlite3
 from pathlib import Path
 from agno.db.sqlite import SqliteDb
+from backend.config import DATABASE_PATH,DATABASE_SCHEMA_PATH,MEMORY_DATABASE_PATH
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATABASE_SCHEMA_PATH = BASE_DIR / "database" / "schema.sql"
-DATABASE_PATH = BASE_DIR / "database" / "ksp_crime_platform.db"
-MEMORY_DATABASE_PATH = BASE_DIR / "database" / "memory_db.db" 
+# BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 # create connection to the db
 def create_connection():
