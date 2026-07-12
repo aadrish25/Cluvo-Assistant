@@ -140,16 +140,18 @@ const userId = stableId("cluvo-user");
 const SESSIONS_KEY = "cluvo-sessions";
 const ACTIVE_SESSION_KEY = "cluvo-active-session";
 
+// after
 function loadSessions() {
   try {
-    return JSON.parse(localStorage.getItem(SESSIONS_KEY)) || [];
+    return JSON.parse(sessionStorage.getItem(SESSIONS_KEY)) || [];
   } catch {
     return [];
   }
 }
 
+// after
 function saveSessions(sessions) {
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  sessionStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
 }
 
 function createSession(label = "New chat") {
@@ -164,18 +166,20 @@ function getMessagesKey(id) {
   return `cluvo-messages-${id}`;
 }
 
+// after
 function loadCachedMessages(id) {
   try {
-    return JSON.parse(localStorage.getItem(getMessagesKey(id))) || [];
+    return JSON.parse(sessionStorage.getItem(getMessagesKey(id))) || [];
   } catch {
     return [];
   }
 }
 
+// after
 function cacheMessage(id, role, content) {
   const messages = loadCachedMessages(id);
   messages.push({ role, content });
-  localStorage.setItem(getMessagesKey(id), JSON.stringify(messages));
+  sessionStorage.setItem(getMessagesKey(id), JSON.stringify(messages));
 }
 
 function renameSessionIfDefault(id, text) {
@@ -190,16 +194,17 @@ function renameSessionIfDefault(id, text) {
 
 let sessionId;
 
+// after
 function initSessionId() {
   let sessions = loadSessions();
   if (!sessions.length) {
     createSession();
     sessions = loadSessions();
   }
-  const storedActive = localStorage.getItem(ACTIVE_SESSION_KEY);
+  const storedActive = sessionStorage.getItem(ACTIVE_SESSION_KEY);
   const found = sessions.find((s) => s.id === storedActive);
   sessionId = found ? found.id : sessions[0].id;
-  localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+  sessionStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
 }
 
 initSessionId();
@@ -672,7 +677,7 @@ function switchSession(newSessionId) {
   if (newSessionId === sessionId) return;
 
   sessionId = newSessionId;
-  localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+  sessionStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
   els.sessionIdView.textContent = sessionId.replace("cluvo-session-", "").slice(0, 8);
 
   renderActiveSessionTranscript();

@@ -60,21 +60,23 @@ button {
 
 .brand-block {
   display: flex;
-  align-items: center;
-  gap: 13px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+  gap: 12px;
 }
 
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  color: #ffffff;
-  background: linear-gradient(135deg, #2563eb, #0f9f6e);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 8px;
-  font-size: 25px;
-  font-weight: 800;
+.brand-mark{
+    width:88px;
+    height:60px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.brand-mark img{
+    width:100%;
+    height:100%;
 }
 
 .brand-block h1,

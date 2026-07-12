@@ -1,0 +1,27 @@
+<svg width="100%" viewBox="0 0 680 360" role="img" xmlns="http://www.w3.org/2000/svg" style="">
+<title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Cluvo logo</title>
+<desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">A rounded square badge with a gradient from blue to teal, containing a stylized letter C formed from a magnifying glass, with small connected network nodes inside suggesting investigative intelligence.</desc>
+<defs>
+<linearGradient id="cluvoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" stop-color="#2563eb"/>
+<stop offset="100%" stop-color="#0f9f6e"/>
+</linearGradient>
+</defs>
+
+<rect x="240" y="60" width="200" height="200" rx="44" fill="url(#cluvoGrad)" style="stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+
+<path d="M 383 108 A 52 52 0 1 0 383 212" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" style="fill:none;stroke:rgb(255, 255, 255);color:rgb(11, 11, 11);stroke-width:14px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<line x1="378" y1="198" x2="410" y2="230" stroke="#ffffff" stroke-width="14" stroke-linecap="round" style="fill:rgb(0, 0, 0);stroke:rgb(255, 255, 255);color:rgb(11, 11, 11);stroke-width:14px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+
+<line x1="322" y1="140" x2="322" y2="178" stroke="#ffffff" stroke-width="3" opacity="0.85" style="fill:rgb(0, 0, 0);stroke:rgb(255, 255, 255);color:rgb(11, 11, 11);stroke-width:3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.85;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<line x1="322" y1="140" x2="352" y2="122" stroke="#ffffff" stroke-width="3" opacity="0.85" style="fill:rgb(0, 0, 0);stroke:rgb(255, 255, 255);color:rgb(11, 11, 11);stroke-width:3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.85;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<line x1="322" y1="178" x2="352" y2="196" stroke="#ffffff" stroke-width="3" opacity="0.85" style="fill:rgb(0, 0, 0);stroke:rgb(255, 255, 255);color:rgb(11, 11, 11);stroke-width:3px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.85;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<circle cx="322" cy="140" r="7" fill="#ffffff" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<circle cx="322" cy="178" r="7" fill="#ffffff" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<circle cx="352" cy="122" r="6" fill="#ffffff" opacity="0.9" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.9;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<circle cx="352" cy="196" r="6" fill="#ffffff" opacity="0.9" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.9;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<text x="340" y="304" text-anchor="middle" font-family="Inter, sans-serif" font-size="34" font-weight="600" fill="#172033" style="fill:rgb(23, 32, 51);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:Inter, sans-serif;font-size:34px;font-weight:600;text-anchor:middle;dominant-baseline:auto">Cluvo</text>
+</svg>
