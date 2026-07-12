@@ -18,10 +18,14 @@ const state = {
   },
 };
 
-const voiceConfig = {
-  inputLang: "en-IN",
-  speechLang: "en-US",
-};
+const audioQueue = [];
+let isPlayingAudio = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let recordingSafetyTimer = null;
+
+
 
 const els = {
   connection: document.querySelector("#connection"),
@@ -37,10 +41,17 @@ const els = {
   panelContent: document.querySelector("#panelContent"),
   panelTabs: document.querySelectorAll(".panel-tabs button"),
   promptButtons: document.querySelectorAll("[data-prompt]"),
+  reconnectBtn: document.querySelector("#reconnectBtn"),
+  newChatBtn: document.querySelector("#newChatBtn"),
+  sessionList: document.querySelector("#sessionList"),
 };
 
-let recognition = null;
-let isListening = false;
+if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+  els.voiceBtn.disabled = true;
+  els.voiceBtn.title = "Voice input is not supported in this browser";
+}
+
+
 
 function stableId(key) {
   const existing = localStorage.getItem(key);
@@ -50,67 +61,149 @@ function stableId(key) {
   return value;
 }
 
-function getTextForBackend(text) {
-  return text;
+function enqueueAudio(base64, format = "wav") {
+  audioQueue.push({ base64, format });
+  playNextAudio();
 }
 
-function getTextForSpeech(text) {
-  return text;
+function playNextAudio() {
+  if (isPlayingAudio || audioQueue.length === 0) return;
+  isPlayingAudio = true;
+
+  const { base64, format } = audioQueue.shift();
+  const audio = new Audio(`data:audio/${format};base64,${base64}`);
+  audio.onended = () => { isPlayingAudio = false; playNextAudio(); };
+  audio.onerror = () => { isPlayingAudio = false; playNextAudio(); };
+  audio.play().catch(() => { isPlayingAudio = false; playNextAudio(); });
 }
 
-function initVoice() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    els.voiceBtn.disabled = true;
-    els.voiceBtn.title = "Voice input is not supported in this browser";
-    return;
-  }
 
-  recognition = new SpeechRecognition();
-  recognition.lang = voiceConfig.inputLang;
-  recognition.continuous = false;
-  recognition.interimResults = false;
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
-  recognition.onstart = () => {
-    isListening = true;
+
+async function startRecording() {
+  if (state.socket?.readyState !== WebSocket.OPEN) return;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach((track) => track.stop());
+      const blob = new Blob(audioChunks, { type: "audio/webm" });
+      const base64 = await blobToBase64(blob);
+
+      state.socket.send(
+        JSON.stringify({
+          type: "voice_message",
+          user_id: userId,
+          session_id: sessionId,
+          audio: base64,
+          mime_type: "audio/webm",
+        })
+      );
+
+      showChatStatus("Transcribing...");
+    };
+
+    mediaRecorder.start();
+    isRecording = true;
     els.voiceBtn.classList.add("active");
     els.statusText.textContent = "Listening...";
-  };
 
-  recognition.onerror = () => {
-    isListening = false;
-    els.voiceBtn.classList.remove("active");
-    els.statusText.textContent = "Voice input unavailable";
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    els.voiceBtn.classList.remove("active");
-  };
-
-  recognition.onresult = (event) => {
-    const transcript = Array.from(event.results)
-      .map((result) => result[0]?.transcript || "")
-      .join(" ")
-      .trim();
-
-    if (transcript) {
-      sendMessage(getTextForBackend(transcript));
-    }
-  };
+    recordingSafetyTimer = setTimeout(() => stopRecording(), 25000);
+  } catch (e) {
+    els.statusText.textContent = "Microphone unavailable";
+    console.error("[VOICE] getUserMedia failed:", e);
+  }
 }
 
-function speak(text) {
-  if (!text || typeof window.speechSynthesis === "undefined") return;
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = voiceConfig.speechLang;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
+function stopRecording() {
+  if (!isRecording || !mediaRecorder) return;
+  clearTimeout(recordingSafetyTimer);
+  mediaRecorder.stop();
+  isRecording = false;
+  els.voiceBtn.classList.remove("active");
 }
 
 const userId = stableId("cluvo-user");
-const sessionId = stableId("cluvo-session");
+
+const SESSIONS_KEY = "cluvo-sessions";
+const ACTIVE_SESSION_KEY = "cluvo-active-session";
+
+function loadSessions() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSIONS_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSessions(sessions) {
+  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+}
+
+function createSession(label = "New chat") {
+  const session = { id: `cluvo-session-${crypto.randomUUID()}`, label, createdAt: Date.now() };
+  const sessions = loadSessions();
+  sessions.unshift(session);
+  saveSessions(sessions);
+  return session;
+}
+
+function getMessagesKey(id) {
+  return `cluvo-messages-${id}`;
+}
+
+function loadCachedMessages(id) {
+  try {
+    return JSON.parse(localStorage.getItem(getMessagesKey(id))) || [];
+  } catch {
+    return [];
+  }
+}
+
+function cacheMessage(id, role, content) {
+  const messages = loadCachedMessages(id);
+  messages.push({ role, content });
+  localStorage.setItem(getMessagesKey(id), JSON.stringify(messages));
+}
+
+function renameSessionIfDefault(id, text) {
+  const sessions = loadSessions();
+  const session = sessions.find((s) => s.id === id);
+  if (session && session.label === "New chat" && text.trim()) {
+    session.label = text.slice(0, 40);
+    saveSessions(sessions);
+    renderSessionList();
+  }
+}
+
+let sessionId;
+
+function initSessionId() {
+  let sessions = loadSessions();
+  if (!sessions.length) {
+    createSession();
+    sessions = loadSessions();
+  }
+  const storedActive = localStorage.getItem(ACTIVE_SESSION_KEY);
+  const found = sessions.find((s) => s.id === storedActive);
+  sessionId = found ? found.id : sessions[0].id;
+  localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+}
+
+initSessionId();
+
 els.userIdView.textContent = userId.replace("cluvo-user-", "").slice(0, 8);
 els.sessionIdView.textContent = sessionId.replace("cluvo-session-", "").slice(0, 8);
 
@@ -233,7 +326,7 @@ function artifactUrl(path) {
 function normalizeArtifacts(raw) {
   const artifacts = raw || {};
   return {
-    graphHtmlPaths: artifacts.graph_html_paths || [],
+    graphHtmlPaths: artifacts.graph_html_path || [],
     pdfPath: artifacts.summary_report_pdf_path || null,
     chart: parseMaybeJson(artifacts.chart_data),
     map: parseMaybeJson(artifacts.map_data),
@@ -264,10 +357,22 @@ function connect() {
       return;
     }
 
+    if (payload.type === "audio_chunk") {
+      enqueueAudio(payload.audio, payload.format || "wav");
+      return;
+    }
+
     if (payload.type === "status") {
       if(!state.streamingNode) showChatStatus(statusLabel(payload));
       return;
     }
+
+    if (payload.type === "transcript") {
+      addMessage("user", payload.text || "");
+      cacheMessage(sessionId, "user", payload.text || "");
+      renameSessionIfDefault(sessionId, payload.text || "");
+      return;
+  }
 
     if (payload.type === "error") {
       clearChatStatus();
@@ -279,19 +384,14 @@ function connect() {
 
     if (payload.type === "assistant_message") {
       clearChatStatus();
+      const finalText = state.streamingNode ? state.streamingText : (payload.message || "Done.");
       if (!state.streamingNode) {
-        // no chunks arrived (e.g. tool-only run) — add the message normally
         addMessage("assistant", payload.message || "Done.");
       }
+      cacheMessage(sessionId, "assistant", finalText);
       clearStreamingMessage();
       state.artifacts = normalizeArtifacts(payload.artifacts);
       els.statusText.textContent = "Connected";
-
-      const spokenText = getTextForSpeech(payload.message || "");
-      if (spokenText) {
-        speak(spokenText);
-      }
-
       renderPanel();
     }
   };
@@ -310,6 +410,8 @@ function sendMessage(text) {
   );
 
   addMessage("user", message);
+  cacheMessage(sessionId, "user", message);
+  renameSessionIfDefault(sessionId, message);
   showChatStatus("Figuring");
   els.messageInput.value = "";
   els.statusText.textContent = "Connected";
@@ -552,6 +654,54 @@ function renderPanel() {
   if (state.activePanel === "table") renderTable();
 }
 
+
+function renderActiveSessionTranscript() {
+  els.transcript.innerHTML = "";
+  clearChatStatus();
+  clearStreamingMessage();
+
+  const cached = loadCachedMessages(sessionId);
+  if (!cached.length) {
+    addMessage("assistant", "Cluvo is ready. Ask about FIRs, people, networks, trends, hotspots, or case reports.");
+  } else {
+    cached.forEach((m) => addMessage(m.role, m.content));
+  }
+}
+
+function switchSession(newSessionId) {
+  if (newSessionId === sessionId) return;
+
+  sessionId = newSessionId;
+  localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+  els.sessionIdView.textContent = sessionId.replace("cluvo-session-", "").slice(0, 8);
+
+  renderActiveSessionTranscript();
+
+  state.artifacts = { graphHtmlPaths: [], pdfPath: null, chart: null, map: null, table: [] };
+  renderPanel();
+  renderSessionList();
+}
+
+function startNewChat() {
+  const session = createSession();
+  switchSession(session.id);
+}
+
+function renderSessionList() {
+  const sessions = loadSessions();
+  els.sessionList.innerHTML = sessions
+    .map(
+      (s) =>
+        `<button class="session-item ${s.id === sessionId ? "active" : ""}" data-session-id="${s.id}">${escapeHtml(s.label)}</button>`
+    )
+    .join("");
+
+  els.sessionList.querySelectorAll(".session-item").forEach((btn) => {
+    btn.addEventListener("click", () => switchSession(btn.dataset.sessionId));
+  });
+}
+
+
 els.composer.addEventListener("submit", (event) => {
   event.preventDefault();
   sendMessage();
@@ -560,16 +710,10 @@ els.composer.addEventListener("submit", (event) => {
 els.reconnectBtn.addEventListener("click", connect);
 
 els.voiceBtn.addEventListener("click", () => {
-  if (!recognition) {
-    initVoice();
-  }
-
-  if (!recognition) return;
-
-  if (!isListening) {
-    recognition.start();
+  if (!isRecording) {
+    startRecording();
   } else {
-    recognition.stop();
+    stopRecording();
   }
 });
 
@@ -586,7 +730,12 @@ els.panelTabs.forEach((button) => {
   });
 });
 
-addMessage("assistant", "Cluvo is ready. Ask about FIRs, people, networks, trends, hotspots, or case reports.");
+els.newChatBtn.addEventListener("click", startNewChat);
+
+renderSessionList();
+renderActiveSessionTranscript();
 renderPanel();
-initVoice();
 connect();
+
+
+
