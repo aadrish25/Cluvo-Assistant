@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.orchestrator.router import InvestigationTeam
 from fastapi.middleware.cors import CORSMiddleware
 from backend.config import REPORTS_DIR,GRAPH_DIR,LISTEN_PORT
+import uvicorn
 
 # create the fast api app - Cluvo
 app = FastAPI(title="Cluvo")
@@ -123,5 +124,7 @@ async def chat_websocket(websocket:WebSocket):
         
         
         
+if __name__ == "__main__":
+    uvicorn.run(app=app,host="0.0.0.0",port=LISTEN_PORT)
 
 
