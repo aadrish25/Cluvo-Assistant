@@ -48,6 +48,8 @@ def build_fir_context(fir_number:str,run_context:RunContext):
         
         run_context.session_state["summary_fir_number"] = fir_number
         
+        print(f"[SUMMARY AGENT] Session state in build_fir_context function: {run_context.session_state}")
+        
         # fetch FIR overview
         fir_overview_query = """
         SELECT
@@ -241,11 +243,13 @@ def build_fir_context(fir_number:str,run_context:RunContext):
 # saving to pdf
 def save_summary_report_pdf(run_context:RunContext,report_text:str) -> str:
     try:
+        print(f"[SUMMARY AGENT] Session state in save_report_function: {run_context.session_state}")
         fir_number = run_context.session_state["summary_fir_number"]
         safe_fir = fir_number.replace("/","_")
         output_path = REPORTS_DIR / f"{safe_fir}_summary_report.pdf"
         
         doc = SimpleDocTemplate(str(output_path),pagesize=A4)
+        print(f"[SUMMARY AGENT] Output path: {str(output_path)}")
         styles = getSampleStyleSheet()
         
         story = []

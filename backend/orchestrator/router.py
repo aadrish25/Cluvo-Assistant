@@ -326,6 +326,9 @@ class InvestigationTeam:
                     
             print(f"[INVESTIGATOR TEAM] User lang: {self._safe_get_session_state(session_id=session_id).get('user_language')}")
             session_state = self._safe_get_session_state(session_id=session_id)
+            
+            print(f"[INVESTIGATOR AGENT] Session state at end: {session_state}")
+            
             yield {
                 "type": "assistant_message",
                 "message": final_response.content,
