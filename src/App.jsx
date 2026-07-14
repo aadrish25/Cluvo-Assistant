@@ -80,7 +80,7 @@ function artifactUrl(path) {
 function normalizeArtifacts(raw) {
   const artifacts = raw || {};
   return {
-    graphHtmlPaths: artifacts.graph_html_paths || [],
+    graphHtmlPaths: artifacts.graph_html_path || [],
     pdfPath: artifacts.summary_report_pdf_path || null,
     chart: parseMaybeJson(artifacts.chart_data),
     map: parseMaybeJson(artifacts.map_data),

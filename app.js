@@ -1,5 +1,14 @@
-const WS_URL = "ws://127.0.0.1:8000/ws/chat";
-const API_BASE = "http://127.0.0.1:8000";
+const isLocal =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+
+const API_BASE = isLocal
+    ? "http://localhost:9000"
+    : "https://cluvo-backend-50043877564.development.catalystappsail.in";
+
+const WS_URL = isLocal
+    ? "ws://localhost:9000/ws/chat"
+    : "wss://cluvo-backend-50043877564.development.catalystappsail.in/ws/chat";
 const CHART_COLORS = ["#2563eb", "#0f9f6e", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2"];
 
 const state = {
@@ -37,7 +46,6 @@ const els = {
   messageInput: document.querySelector("#messageInput"),
   sendBtn: document.querySelector("#sendBtn"),
   voiceBtn: document.querySelector("#voiceBtn"),
-  reconnectBtn: document.querySelector("#reconnectBtn"),
   panelContent: document.querySelector("#panelContent"),
   panelTabs: document.querySelectorAll(".panel-tabs button"),
   promptButtons: document.querySelectorAll("[data-prompt]"),
