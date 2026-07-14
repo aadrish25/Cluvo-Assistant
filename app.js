@@ -3,17 +3,13 @@ const isLocal =
     window.location.hostname === "127.0.0.1";
 
 const API_BASE = isLocal
-    ? "http://localhost:9000"
+    ? "http://localhost:8000"
     : "https://cluvo-backend-50043877564.development.catalystappsail.in";
 
-const WS_URL = isLocal
-    ? "ws://localhost:9000/ws/chat"
-    : "wss://cluvo-backend-50043877564.development.catalystappsail.in/ws/chat";
+
 const CHART_COLORS = ["#2563eb", "#0f9f6e", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2"];
 
 const state = {
-  socket: null,
-  connection: "connecting",
   activePanel: "report",
   statusNode: null,
   streamingNode: null,
@@ -69,6 +65,7 @@ function stableId(key) {
   return value;
 }
 
+
 function enqueueAudio(base64, format = "wav") {
   audioQueue.push({ base64, format });
   playNextAudio();
@@ -97,8 +94,6 @@ function blobToBase64(blob) {
 
 
 async function startRecording() {
-  if (state.socket?.readyState !== WebSocket.OPEN) return;
-
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
@@ -106,22 +101,36 @@ async function startRecording() {
 
     mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
     mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach((track) => track.stop());
-      const blob = new Blob(audioChunks, { type: "audio/webm" });
-      const base64 = await blobToBase64(blob);
+  stream.getTracks().forEach((track) => track.stop());
+  const blob = new Blob(audioChunks, { type: "audio/webm" });
+  const base64 = await blobToBase64(blob);
 
-      state.socket.send(
-        JSON.stringify({
-          type: "voice_message",
-          user_id: userId,
-          session_id: sessionId,
-          audio: base64,
-          mime_type: "audio/webm",
-        })
-      );
+  showChatStatus("Transcribing...");
 
-      showChatStatus("Transcribing...");
-    };
+  try {
+    const resp = await fetch(`${API_BASE}/chat/voice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        session_id: sessionId,
+        audio: base64,
+        mime_type: "audio/webm",
+      }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      clearChatStatus();
+      addMessage("assistant", "Voice processing failed. Please try again.");
+      return;
+    }
+    pollJob(data.job_id);
+  } catch (e) {
+    clearChatStatus();
+    addMessage("assistant", "Couldn't reach Cluvo. Please try again.");
+    console.error("[VOICE] Error:", e);
+  }
+  };
 
     mediaRecorder.start();
     isRecording = true;
@@ -135,13 +144,33 @@ async function startRecording() {
   }
 }
 
+
 function stopRecording() {
-  if (!isRecording || !mediaRecorder) return;
-  clearTimeout(recordingSafetyTimer);
-  mediaRecorder.stop();
-  isRecording = false;
-  els.voiceBtn.classList.remove("active");
+    if (!mediaRecorder || !isRecording) return;
+
+    clearTimeout(recordingSafetyTimer);
+
+    isRecording = false;
+
+    els.voiceBtn.classList.remove("active");
+    els.statusText.textContent = "Processing...";   // or "Transcribing..."
+
+    mediaRecorder.stop();
 }
+
+
+
+async function checkBackendReachable() {
+  try {
+    const resp = await fetch(`${API_BASE}/`);
+    els.connection.className = "connection online";
+    els.statusText.textContent = "Connected";
+  } catch {
+    els.connection.className = "connection offline";
+    els.statusText.textContent = "Backend unreachable";
+  }
+}
+
 
 const userId = stableId("cluvo-user");
 
@@ -220,12 +249,6 @@ initSessionId();
 els.userIdView.textContent = userId.replace("cluvo-user-", "").slice(0, 8);
 els.sessionIdView.textContent = sessionId.replace("cluvo-session-", "").slice(0, 8);
 
-function setConnection(status, label) {
-  state.connection = status;
-  els.connection.className = `connection ${status}`;
-  els.statusText.textContent = label;
-  els.sendBtn.disabled = status !== "online";
-}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -351,84 +374,108 @@ function statusLabel(payload) {
   return payload.message || payload.status || payload.event || payload.content || "Figuring";
 }
 
-function connect() {
-  if (state.socket) state.socket.close();
-  setConnection("connecting", "Connecting to Cluvo...");
 
-  const socket = new WebSocket(WS_URL);
-  state.socket = socket;
 
-  socket.onopen = () => setConnection("online", "Connected");
-  socket.onclose = () => setConnection("offline", "Disconnected");
-  socket.onerror = () => setConnection("offline", "Connection error");
-
-  socket.onmessage = (event) => {
-    const payload = JSON.parse(event.data);
-
-    if (payload.type == "stream_chunk"){
-      appendStreamChunk(payload.content || "");
-      return;
-    }
-
-    if (payload.type === "audio_chunk") {
-      enqueueAudio(payload.audio, payload.format || "wav");
-      return;
-    }
-
-    if (payload.type === "status") {
-      if(!state.streamingNode) showChatStatus(statusLabel(payload));
-      return;
-    }
-
-    if (payload.type === "transcript") {
-      addMessage("user", payload.text || "");
-      cacheMessage(sessionId, "user", payload.text || "");
-      renameSessionIfDefault(sessionId, payload.text || "");
-      return;
-  }
-
-    if (payload.type === "error") {
-      clearChatStatus();
-      clearStreamingMessage();
-      addMessage("assistant", payload.message || "Something went wrong.");
-      els.statusText.textContent = "Connected";
-      return;
-    }
-
-    if (payload.type === "assistant_message") {
-      clearChatStatus();
-      const finalText = state.streamingNode ? state.streamingText : (payload.message || "Done.");
-      if (!state.streamingNode) {
-        addMessage("assistant", payload.message || "Done.");
-      }
-      cacheMessage(sessionId, "assistant", finalText);
-      clearStreamingMessage();
-      state.artifacts = normalizeArtifacts(payload.artifacts);
-      els.statusText.textContent = "Connected";
-      renderPanel();
-    }
-  };
-}
-
-function sendMessage(text) {
+async function sendMessage(text) {
   const message = String(text ?? els.messageInput.value).trim();
-  if (!message || state.socket?.readyState !== WebSocket.OPEN) return;
-
-  state.socket.send(
-    JSON.stringify({
-      user_id: userId,
-      session_id: sessionId,
-      message,
-    })
-  );
+  if (!message) return;
 
   addMessage("user", message);
   cacheMessage(sessionId, "user", message);
   renameSessionIfDefault(sessionId, message);
   showChatStatus("Figuring");
   els.messageInput.value = "";
-  els.statusText.textContent = "Connected";
+
+  try {
+    const resp = await fetch(`${API_BASE}/chat/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, session_id: sessionId, message }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      clearChatStatus();
+      addMessage("assistant", "Something went wrong. Please try again.");
+      return;
+    }
+    pollJob(data.job_id);
+  } catch (e) {
+    clearChatStatus();
+    addMessage("assistant", "Couldn't reach Cluvo. Please try again.");
+    console.error("[SEND] Error:", e);
+  }
 }
+
+
+function handleServerEvent(payload) {
+  if (payload.type === "stream_chunk") {
+    appendStreamChunk(payload.content || "");
+    return;
+  }
+  if (payload.type === "audio_chunk") {
+    enqueueAudio(payload.audio, payload.format || "wav");
+    return;
+  }
+  if (payload.type === "status") {
+    if (!state.streamingNode) showChatStatus(statusLabel(payload));
+    return;
+  }
+  if (payload.type === "transcript") {
+    addMessage("user", payload.text || "");
+    cacheMessage(sessionId, "user", payload.text || "");
+    renameSessionIfDefault(sessionId, payload.text || "");
+    return;
+  }
+  if (payload.type === "error") {
+    clearChatStatus();
+    clearStreamingMessage();
+    addMessage("assistant", payload.message || "Something went wrong.");
+    return;
+  }
+  if (payload.type === "assistant_message") {
+    clearChatStatus();
+    const finalText = state.streamingNode ? state.streamingText : (payload.message || "Done.");
+    if (!state.streamingNode) {
+      addMessage("assistant", payload.message || "Done.");
+    }
+    cacheMessage(sessionId, "assistant", finalText);
+    clearStreamingMessage();
+    state.artifacts = normalizeArtifacts(payload.artifacts);
+    els.statusText.textContent = "Connected";
+    renderPanel();
+  }
+}
+
+async function pollJob(jobId) {
+  let cursor = 0;
+  while (true) {
+    try {
+      const resp = await fetch(`${API_BASE}/chat/poll/${jobId}?since=${cursor}`);
+      const data = await resp.json();
+
+      if (data.error) {
+        clearChatStatus();
+        addMessage("assistant", "Something went wrong. Please try again.");
+        return;
+      }
+
+      for (const payload of data.events) {
+        handleServerEvent(payload);
+      }
+      cursor = data.cursor;
+
+      if (data.done) return;
+    } catch (e) {
+      console.error("[POLL] Error polling job:", e);
+      clearChatStatus();
+      addMessage("assistant", "Connection issue. Please try again.");
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 800));
+  }
+}
+
+
 
 function emptyPanel(icon, title, text) {
   els.panelContent.innerHTML = `
@@ -720,7 +767,7 @@ els.composer.addEventListener("submit", (event) => {
   sendMessage();
 });
 
-els.reconnectBtn.addEventListener("click", connect);
+els.reconnectBtn.addEventListener("click", checkBackendReachable);
 
 els.voiceBtn.addEventListener("click", () => {
   if (!isRecording) {
@@ -748,7 +795,4 @@ els.newChatBtn.addEventListener("click", startNewChat);
 renderSessionList();
 renderActiveSessionTranscript();
 renderPanel();
-connect();
-
-
-
+checkBackendReachable();
