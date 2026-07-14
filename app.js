@@ -3,7 +3,7 @@ const isLocal =
     window.location.hostname === "127.0.0.1";
 
 const API_BASE = isLocal
-    ? "http://localhost:8000"
+    ? "http://localhost:9000"
     : "https://cluvo-backend-50043877564.development.catalystappsail.in";
 
 
