@@ -123,6 +123,11 @@ async def chat_websocket(websocket:WebSocket):
         print(f"[MAIN] Error in websocket connection: {e}")
         
         
+@app.get("/debug-version")
+def debug_version():
+    return {"version": "v2-with-ws-endpoint-fix"}
+        
+        
         
 if __name__ == "__main__":
     uvicorn.run(app=app,host="0.0.0.0",port=LISTEN_PORT)

@@ -1,0 +1,16 @@
+.env
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.catalystignore
+.catalystrc
+node_modules/
+.vscode/
+.idea/
+reports/
+graph_artifacts/
+*.db
+*.sqlite
+*.sqlite3
