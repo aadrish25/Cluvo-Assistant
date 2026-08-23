@@ -60,8 +60,7 @@ Name handling:
 - If there are multiple matches, ask the user to specify the person more clearly.
 - Only use `create_network_centered_around_person` with a single resolved `person_id`.
 - Do not generate multiple graphs for all matches automatically.
-- Do not merge same-name people into one graph unless the user explicitly asks
-  for a combined graph of all matches.
+- Do not merge same-name people into one graph.
 
 Answering rules:
 - Be brief and operational.
