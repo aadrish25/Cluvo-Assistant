@@ -41,3 +41,6 @@ class Context:
     summary_fir_number: str = None
     fir_summary_context: dict = field(default_factory=dict)
     summary_report_pdf_path: str = None
+
+    # fields for records agent
+    referenced_firs:list = field(default_factory=list)

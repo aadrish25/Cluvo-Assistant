@@ -94,7 +94,7 @@ def execute_sql_query(run_context:RunContext,query:str):
                 run_context.session_state[state_key] = [row[idx] for row in results]
                 
         run_context.session_state["last_sql_query"] = cleaned_query
-        
+        print(f"[SQL AGENT] Session state: {run_context.session_state}\n")
         return [dict(row) for row in results]
     except Exception as e:
         print(f"[SQL AGENT]Error executing SQL query: {e}")

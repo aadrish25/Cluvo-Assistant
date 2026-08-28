@@ -34,7 +34,8 @@ def create_summary_agent():
               ReasoningTools(add_instructions=True),
           ],
           db=memory_db,
-          add_history_to_context=False,
+          add_history_to_context=True,
+          num_history_runs=10,
           add_session_state_to_context=True,
           telemetry=DEBUG_MODE,
           debug_mode = DEBUG_MODE

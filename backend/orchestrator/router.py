@@ -17,6 +17,7 @@ from backend.orchestrator.agents.graph_agent import create_graph_agent
 from backend.orchestrator.agents.analytics_agent import create_analytics_agent,AnalyticsResponse
 from backend.orchestrator.agents.summary_agent import create_summary_agent
 from backend.orchestrator.agents.general_agent import create_general_agent
+from backend.orchestrator.agents.records_agent import create_records_agent
 from backend.services.sarvam import SarvamTranslationLayer
 from backend.config import AGENT_STATUS_LABELS,DELEGATE_TOOL_NAMES,DEBUG_MODE
 from dataclasses import asdict
@@ -24,6 +25,9 @@ from backend.database import memory_db
 
 
 SENTENCE_END_RE = re.compile(r'(?<=[.!?।])\s+')  # ।  catches Hindi/Devanagari sentence-enders too
+CITATION_HEADER_RE = re.compile(
+    r"\[FIR:\s*(?P<fir_number>[^\|]+?)\s*\|\s*station:\s*(?P<station>[^\|]+?)\s*\|\s*date_filed:\s*(?P<date_filed>[^\|]+?)\s*\|\s*page:\s*(?P<page>[^\|]+?)\s*\|\s*score:\s*(?P<score>[\d.]+)\]"
+)
 
 
 class InvestigationTeam:
@@ -33,6 +37,7 @@ class InvestigationTeam:
         self.analytics_agent = create_analytics_agent()
         self.summary_agent = create_summary_agent()
         self.general_agent = create_general_agent()
+        self.records_agent = create_records_agent()
         self.translation_layer = SarvamTranslationLayer()
         self.sqlite_db = memory_db
         
@@ -47,15 +52,12 @@ class InvestigationTeam:
                 description = "A team of specialized agents for the KSP Crime Intelligence Platform.",
                 system_message = ROUTER_AGENT_SYSTEM_PROMPT,
                 mode = TeamMode.coordinate,
-                members = [self.sql_agent,self.graph_agent,self.analytics_agent,self.summary_agent,self.general_agent],
+                members = [self.sql_agent,self.graph_agent,self.analytics_agent,self.summary_agent,self.general_agent,self.records_agent],
                 tools=[ReasoningTools(add_instructions=True)],
                 session_state=asdict(Context()),
                 add_session_state_to_context=True,
-                update_memory_on_run=True,
-                enable_agentic_memory=True,
-                enable_agentic_state=True,
                 add_history_to_context=True,
-                num_history_runs=5,
+                num_history_runs=10,
                 db=self.sqlite_db,
                 telemetry=DEBUG_MODE,
                 debug_mode=DEBUG_MODE,
@@ -73,6 +75,51 @@ class InvestigationTeam:
         # we can't pre-seed state before that exists, so this is now just
         # a safe check rather than a write.
         return self._safe_get_session_state(session_id)
+    
+    
+    def _build_citation_block(self, response) -> str | None:
+        """
+        Builds the citation block text from the Records Agent's tool calls,
+        without mutating anything. Returns None if there's nothing to cite.
+        """
+        for member_response in getattr(response, "member_responses", []) or []:
+            if member_response.agent_name != "Records Agent":
+                continue
+
+            tool_execs = getattr(member_response, "tools", None) or []
+
+            seen = set()
+            sources = []
+            for tool_exec in tool_execs:
+                if tool_exec.tool_name != "search_fir_knowledge" or tool_exec.tool_call_error:
+                    continue
+
+                result = tool_exec.result or ""
+                for match in CITATION_HEADER_RE.finditer(result):
+                    fir_number = match.group("fir_number").strip()
+                    station = match.group("station").strip()
+                    date_filed = match.group("date_filed").strip()
+                    page = match.group("page").strip()
+
+                    key = (fir_number, page)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    sources.append(f"{fir_number} — {station} (filed {date_filed}), page {page}")
+
+            if sources:
+                return "\n\n**Referenced FIRs:**\n" + "\n".join(f"- {s}" for s in sources)
+
+        return None
+
+    def apply_records_citations(self, response) -> None:
+        """
+        Mutates response.content in place by appending the citation block.
+        Used by the non-streaming team_run path.
+        """
+        citation_block = self._build_citation_block(response)
+        if citation_block:
+            response.content = (response.content or "") + citation_block
             
     
     def team_run(self,input:str,user_id:str,session_id:str):
@@ -103,6 +150,7 @@ class InvestigationTeam:
                     
                 # after updating the session state, add the updated session state in the response object as well
                 response.session_state = self.team.get_session_state(session_id=session_id)
+            # self.apply_records_citations(response)
             
             return response
         
@@ -323,6 +371,15 @@ class InvestigationTeam:
                         },
                         session_id=session_id,
                     )
+            
+            # Build citation block and STREAM it as its own chunk, so the
+            # frontend (which renders stream_chunk events, not the final
+            # assistant_message.message field) actually shows it.
+            citation_block = self._build_citation_block(final_response)
+            if citation_block:
+                final_response.content = (final_response.content or "") + citation_block
+                yield {"type": "stream_chunk", "content": citation_block}
+
                     
             print(f"[INVESTIGATOR TEAM] User lang: {self._safe_get_session_state(session_id=session_id).get('user_language')}")
             session_state = self._safe_get_session_state(session_id=session_id)
