@@ -3,10 +3,12 @@ import base64
 import uuid
 from pathlib import Path
 from fastapi import FastAPI, Query
+from agno.tracing import setup_tracing
+from agno.db.sqlite import SqliteDb
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from backend.orchestrator.router import InvestigationTeam
-from backend.config import REPORTS_DIR, GRAPH_DIR, LISTEN_PORT
+from backend.config import REPORTS_DIR, GRAPH_DIR, LISTEN_PORT,TRACES_DB
 import uvicorn
 
 app = FastAPI(title="Cluvo")
@@ -20,6 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+traces_db = SqliteDb(db_file=TRACES_DB)
+setup_tracing(db=traces_db)
 
 
 team = InvestigationTeam()
@@ -136,6 +141,11 @@ async def poll_job(job_id: str, since: int = Query(0)):
             processed.append(chunk)
 
     return {"events": processed, "cursor": len(job["events"]), "done": job["done"]}
+
+@app.get("/debug/traces")
+async def get_traces(limit:int=20):
+    traces,total = traces_db.get_traces(limit=limit)
+    return {"total": total, "traces": [{"name": t.name, "duration_ms": t.duration_ms} for t in traces]}
 
 
 if __name__ == "__main__":

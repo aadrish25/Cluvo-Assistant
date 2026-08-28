@@ -76,4 +76,7 @@ huggingface-hub
 sentence-transformers
 lancedb
 pypdf
+opentelemetry-sdk
+opentelemetry-api
+openinference-instrumentation-agno
 cohere
