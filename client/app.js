@@ -3,7 +3,7 @@ const isLocal =
     window.location.hostname === "127.0.0.1";
 
 const API_BASE = isLocal
-    ? "http://localhost:8000"
+    ? "http://localhost:9000"
     : "https://cluvo-backend-50043877564.development.catalystappsail.in";
 
 
@@ -90,53 +90,6 @@ function blobToBase64(blob) {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
-}
-
-function renderMarkdown(text) {
-  const escaped = escapeHtml(text);
-
-  const lines = escaped.split("\n");
-  const htmlParts = [];
-  let inList = false;
-
-  for (let rawLine of lines) {
-    let line = rawLine;
-
-    // headings: ### / ## / #
-    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
-    if (headingMatch) {
-      if (inList) { htmlParts.push("</ul>"); inList = false; }
-      const level = Math.min(headingMatch[1].length, 6);
-      htmlParts.push(`<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`);
-      continue;
-    }
-
-    // bullet list items: - or *
-    const bulletMatch = line.match(/^[-*]\s+(.*)$/);
-    if (bulletMatch) {
-      if (!inList) { htmlParts.push("<ul>"); inList = true; }
-      htmlParts.push(`<li>${inlineMarkdown(bulletMatch[1])}</li>`);
-      continue;
-    }
-
-    if (inList) { htmlParts.push("</ul>"); inList = false; }
-
-    if (line.trim() === "") {
-      htmlParts.push("<p></p>");
-    } else {
-      htmlParts.push(`<p>${inlineMarkdown(line)}</p>`);
-    }
-  }
-
-  if (inList) htmlParts.push("</ul>");
-
-  return htmlParts.join("");
-}
-
-function inlineMarkdown(line) {
-  return line
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")  // **bold**
-    .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, "<em>$1</em>"); // *italic* (not part of **)
 }
 
 
@@ -310,7 +263,10 @@ function addMessage(role, content) {
   const message = document.createElement("article");
   message.className = `message ${role}`;
   const avatarText = role === "assistant" ? "C" : "U";
-  const safeLines = renderMarkdown(String(content || ""));
+  const safeLines = String(content || "")
+    .split("\n")
+    .map((line) => `<p>${escapeHtml(line || " ")}</p>`)
+    .join("");
   message.innerHTML = `
     <div class="avatar">${avatarText}</div>
     <div class="bubble">${safeLines}</div>
@@ -364,7 +320,10 @@ function appendStreamChunk(content) {
   const node = ensureStreamingMessage();
   state.streamingText += content;
 
-  const safeLines = renderMarkdown(state.streamingText);  // use accumulated text
+  const safeLines = state.streamingText
+    .split("\n")
+    .map((line) => `<p>${escapeHtml(line || " ")}</p>`)
+    .join("");
   node.querySelector(".bubble").innerHTML = safeLines;
 
   els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });

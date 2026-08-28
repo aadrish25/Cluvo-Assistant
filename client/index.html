@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cluvo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">
+            <img src="./assets/cluvo_logo.png" alt="Cluvo Logo">
+          </div>
+          <div>
+            <h1>Cluvo</h1>
+            <p>KSP crime intelligence assistant</p>
+          </div>
+        </div>
+
+        <div id="connection" class="connection connecting">
+          <span class="status-dot"></span>
+          <span id="statusText">Connecting to Cluvo...</span>
+        </div>
+
+        <div class="identity-block">
+          <div>
+            <span>User</span>
+            <strong id="userIdView">loading</strong>
+          </div>
+          <div>
+            <span>Session</span>
+            <strong id="sessionIdView">loading</strong>
+          </div>
+        </div>
+
+        <div class="section-label">Sessions</div>
+        <button id="newChatBtn" type="button">+ New Chat</button>
+        <div id="sessionList" class="session-list"></div>
+
+        <div class="prompt-stack">
+          <div class="section-label">Try These</div>
+          <button data-prompt="Who are the accused in FIR KSP/2023/0042?">Who are the accused in FIR KSP/2023/0042?</button>
+          <button data-prompt="Build a network around Ravi Kumar">Build a network around Ravi Kumar</button>
+          <button data-prompt="Show monthly crime trends">Show monthly crime trends</button>
+          <button data-prompt="Which district has the highest crime count?">Which district has the highest crime count?</button>
+          <button data-prompt="Generate a case report for FIR KSP/2023/0042">Generate a case report for FIR KSP/2023/0042</button>
+        </div>
+      </aside>
+
+      <main class="chat-area">
+        <header class="topbar">
+          <div>
+            <p>Live assistant workspace</p>
+            <h2>Ask Cluvo</h2>
+          </div>
+          <button id="reconnectBtn" class="icon-button" type="button" title="Reconnect">↻</button>
+        </header>
+
+        <section id="transcript" class="transcript"></section>
+
+        <form id="composer" class="composer">
+          <input id="messageInput" autocomplete="off" placeholder="Ask about FIRs, suspects, networks, trends, hotspots, or reports..." />
+          <button id="voiceBtn" type="button" title="Voice input">🎤</button>
+          <button id="sendBtn" type="submit" title="Send message">➤</button>
+        </form>
+      </main>
+
+      <aside class="artifact-area">
+        <div class="artifact-header">
+          <div>
+            <p>Outputs</p>
+            <h2>Intelligence Board</h2>
+          </div>
+          <span class="board-icon">◉</span>
+        </div>
+
+        <nav class="panel-tabs" aria-label="Artifact panels">
+          <button class="active" data-panel="report" title="Reports">PDF</button>
+          <button data-panel="graph" title="Graphs">NET</button>
+          <button data-panel="chart" title="Charts">CHT</button>
+          <button data-panel="map" title="Map">MAP</button>
+          <button data-panel="table" title="Table">TBL</button>
+        </nav>
+
+        <section id="panelContent" class="panel-content"></section>
+      </aside>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

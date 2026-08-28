@@ -1,0 +1,36 @@
+{
+  "defaults": {
+    "project": 1,
+    "env": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "53178000000013049",
+      "name": "Cluvo",
+      "domain": {
+        "id": "50043877564",
+        "name": "cluvo-60077873390.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60077873390",
+          "name": "Development",
+          "type": 3
+        },
+        {
+          "idx": 2,
+          "id": "50043963302",
+          "name": "Production",
+          "type": 1
+        }
+      ]
+    }
+  ]
+}
