@@ -11,7 +11,10 @@ from backend.orchestrator.router import InvestigationTeam
 from backend.config import REPORTS_DIR, GRAPH_DIR, LISTEN_PORT,TRACES_DB
 import uvicorn
 
+print("========== MAIN.PY STARTING ==========")
+
 app = FastAPI(title="Cluvo")
+print("FastAPI app created")
 app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
 app.mount("/graph_artifacts", StaticFiles(directory=str(GRAPH_DIR)), name="graph_artifacts")
 
@@ -26,10 +29,14 @@ app.add_middleware(
 traces_db = SqliteDb(db_file=TRACES_DB)
 setup_tracing(db=traces_db)
 
+print("Tracing initialized")
+
 
 team = InvestigationTeam()
 initialized_sessions = set()
 job_store: dict[str, dict] = {}  # job_id -> {"events": [...], "done": bool}
+
+print("InvestigationTeam initialized")
 
 
 def initialize_chat_session(user_id: str, session_id: str):
@@ -170,4 +177,5 @@ async def get_traces(limit:int=20):
 
 
 if __name__ == "__main__":
+    print(f"Starting Uvicorn on {LISTEN_PORT}")
     uvicorn.run(app=app, host="0.0.0.0", port=LISTEN_PORT)
