@@ -10,6 +10,15 @@
   </head>
   <body>
     <div class="app-shell">
+      <div id="identityModal" class="identity-modal hidden">
+        <div class="identity-modal-card">
+          <h2>Welcome to Cluvo</h2>
+          <p>Enter your name so your sessions are tied to you.</p>
+          <label for="officerNameInput">Name</label>
+          <input id="officerNameInput" autocomplete="off" placeholder="e.g. Ravi Kumar" />
+          <button id="officerNameSubmit" type="button">Continue</button>
+        </div>
+      </div>
 
       <!-- ============ SIDEBAR ============ -->
       <aside class="sidebar">
@@ -35,6 +44,7 @@
             <strong id="sessionIdView">loading</strong>
           </div>
         </div>
+        <button id="editIdentityBtn" class="small-link identity-edit" type="button">Not you? Change name</button>
 
         <div class="sidebar-scroll">
           <div class="section-label">Sessions</div>

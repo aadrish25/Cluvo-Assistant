@@ -11,7 +11,7 @@ const CHART_COLORS = ["#2563eb", "#0f9f6e", "#f59e0b", "#dc2626", "#7c3aed", "#0
 
 const state = {
   activePanel: "report",
-  statusNode: null,
+  statusTrail: null,
   streamingNode: null,
   streamingText: "",
   artifacts: {
@@ -22,6 +22,44 @@ const state = {
     table: [],
   },
 };
+
+
+const OFFICER_NAME_KEY = "cluvo-officer-name";
+const OFFICER_ID_KEY = "cluvo-user-id";
+
+function slugify(name) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 40);
+}
+
+function shortSuffix() {
+  return crypto.randomUUID().slice(0, 4);
+}
+
+function loadIdentity() {
+  const name = localStorage.getItem(OFFICER_NAME_KEY);
+  const id = localStorage.getItem(OFFICER_ID_KEY);
+  if (name && id) return { name, id };
+  return null;
+}
+
+function saveIdentity(name) {
+  const slug = slugify(name) || "officer";
+  const id = `${slug}-${shortSuffix()}`;
+  localStorage.setItem(OFFICER_NAME_KEY, name.trim());
+  localStorage.setItem(OFFICER_ID_KEY, id);
+  return { name: name.trim(), id };
+}
+
+function clearIdentity() {
+  localStorage.removeItem(OFFICER_NAME_KEY);
+  localStorage.removeItem(OFFICER_ID_KEY);
+}
+
 
 const audioQueue = [];
 let isPlayingAudio = false;
@@ -48,6 +86,10 @@ const els = {
   reconnectBtn: document.querySelector("#reconnectBtn"),
   newChatBtn: document.querySelector("#newChatBtn"),
   sessionList: document.querySelector("#sessionList"),
+  identityModal: document.querySelector("#identityModal"),
+  officerNameInput: document.querySelector("#officerNameInput"),
+  officerNameSubmit: document.querySelector("#officerNameSubmit"),
+  editIdentityBtn: document.querySelector("#editIdentityBtn"),
 };
 
 if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -57,13 +99,7 @@ if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
 
 
 
-function stableId(key) {
-  const existing = localStorage.getItem(key);
-  if (existing) return existing;
-  const value = `${key}-${crypto.randomUUID()}`;
-  localStorage.setItem(key, value);
-  return value;
-}
+
 
 
 function enqueueAudio(base64, format = "wav") {
@@ -218,8 +254,51 @@ async function checkBackendReachable() {
   }
 }
 
+let userId;
+let officerName;
 
-const userId = stableId("cluvo-user");
+function applyIdentity(identity) {
+  userId = identity.id;
+  officerName = identity.name;
+  els.userIdView.textContent = officerName;
+  els.identityModal.classList.add("hidden");
+}
+
+function promptForIdentity() {
+  els.identityModal.classList.remove("hidden");
+  els.officerNameInput.value = "";
+  els.officerNameInput.focus();
+}
+
+function initIdentity() {
+  const existing = loadIdentity();
+  if (existing) {
+    applyIdentity(existing);
+  } else {
+    promptForIdentity();
+  }
+}
+
+els.officerNameSubmit.addEventListener("click", () => {
+  const name = els.officerNameInput.value.trim();
+  if (!name) {
+    els.officerNameInput.focus();
+    return;
+  }
+  const identity = saveIdentity(name);
+  applyIdentity(identity);
+});
+
+els.officerNameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") els.officerNameSubmit.click();
+});
+
+els.editIdentityBtn.addEventListener("click", () => {
+  clearIdentity();
+  promptForIdentity();
+});
+
+initIdentity();
 
 const SESSIONS_KEY = "cluvo-sessions";
 const ACTIVE_SESSION_KEY = "cluvo-active-session";
@@ -293,7 +372,6 @@ function initSessionId() {
 
 initSessionId();
 
-els.userIdView.textContent = userId.replace("cluvo-user-", "").slice(0, 8);
 els.sessionIdView.textContent = sessionId.replace("cluvo-session-", "").slice(0, 8);
 
 
@@ -320,27 +398,43 @@ function addMessage(role, content) {
 }
 
 function showChatStatus(content) {
-  const label = content || "Figuring";
+  const label = content || "Working on it...";
 
-  if (!state.statusNode) {
-    const statusNode = document.createElement("article");
-    statusNode.className = "chat-status";
-    statusNode.innerHTML = `
-      <span class="chat-status-dot"></span>
-      <span class="chat-status-text"></span>
-    `;
-    els.transcript.appendChild(statusNode);
-    state.statusNode = statusNode;
+  if (!state.statusTrail) {
+    const trail = document.createElement("div");
+    trail.className = "status-trail";
+    els.transcript.appendChild(trail);
+    state.statusTrail = trail;
   }
 
-  state.statusNode.querySelector(".chat-status-text").textContent = label;
+  // freeze the previous step as "done"
+  const prevActive = state.statusTrail.querySelector(".status-step:not(.done)");
+  if (prevActive) {
+    prevActive.classList.add("done");
+    prevActive.querySelector(".status-step-icon").textContent = "✓";
+  }
+
+  // don't add a duplicate row if the same status fires twice in a row
+  const lastStep = state.statusTrail.lastElementChild;
+  if (lastStep && lastStep.dataset.label === label) {
+    els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });
+    return;
+  }
+
+  const step = document.createElement("div");
+  step.className = "status-step";
+  step.dataset.label = label;
+  step.innerHTML = `<span class="status-step-icon"></span><span class="status-step-text"></span>`;
+  step.querySelector(".status-step-text").textContent = label;
+  state.statusTrail.appendChild(step);
+
   els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });
 }
 
 function clearChatStatus() {
-  if (!state.statusNode) return;
-  state.statusNode.remove();
-  state.statusNode = null;
+  if (!state.statusTrail) return;
+  state.statusTrail.remove();
+  state.statusTrail = null;
 }
 
 function ensureStreamingMessage() {
