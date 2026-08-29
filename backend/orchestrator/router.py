@@ -30,6 +30,9 @@ CITATION_HEADER_RE = re.compile(
     r"\[FIR:\s*(?P<fir_number>[^\|]+?)\s*\|\s*station:\s*(?P<station>[^\|]+?)\s*\|\s*date_filed:\s*(?P<date_filed>[^\|]+?)\s*\|\s*page:\s*(?P<page>[^\|]+?)\s*\|\s*score:\s*(?P<score>[\d.]+)\]"
 )
 
+MD_PREFIX_RE = re.compile(r'^(#{1,6}\s+|-\s+)')
+MD_BOLD_RE = re.compile(r'\*\*(.+?)\*\*')
+
 
 class InvestigationTeam:
     def __init__(self):
@@ -110,6 +113,24 @@ class InvestigationTeam:
         if isinstance(options, str):
             return options
         return random.choice(self._generic_status_messages)
+    
+    
+    async def _translate_markdown_line(self, line: str, target_lang: str) -> str | None:
+        if not line.strip():
+            return line
+
+        prefix_match = MD_PREFIX_RE.match(line)
+        prefix = prefix_match.group(0) if prefix_match else ""
+        body = line[len(prefix):]
+
+        translated = await self.translation_layer.translate_text(
+            text=body, source_lang="en-IN", target_lang=target_lang,
+        ) or {}
+        translated_body = translated.get("translated_text")
+        if not translated_body:
+            return None
+
+        return prefix + translated_body
     
     def initialize_session(self, user_id: str, session_id: str):
         # Agno only creates the session row on the first arun()/run() call —
@@ -342,23 +363,21 @@ class InvestigationTeam:
                         continue
                     
                     sentence_buffer += event.content
-                    parts = SENTENCE_END_RE.split(sentence_buffer)
+                    lines = sentence_buffer.split("\n")
+                    complete_lines,sentence_buffer = lines[:-1],lines[-1]
                     
-                    if len(parts)>1:
-                        *complete,sentence_buffer = parts
-                        for sentence in complete:
-                            translated = await self.translation_layer.translate_text(
-                                text=sentence,source_lang="en-IN",target_lang=target_lang,
-                            ) or {}
-                            
-                            translated_sentence = translated.get("translated_text")
-                            
-                            if not translated_sentence:
-                                continue
-                            
-                            yield {"type": "stream_chunk", "content": translated_sentence + " "}
-                            
-                            audio = await self.translation_layer.synthesize_speech(text=translated_sentence,target_lang=target_lang,speaker="shubh") or {}
+                    
+                    for line in complete_lines:
+                        translated_line = await self._translate_markdown_line(line,target_lang)
+                        if translated_line is None:
+                            continue
+                        
+                        yield{"type":"stream_chunk","content":translated_line+"\n"}
+                        
+                        speakable = MD_PREFIX_RE.sub("", translated_line).replace("*", "")
+                        
+                        if speakable.strip():
+                            audio = await self.translation_layer.synthesize_speech(text=speakable, target_lang=target_lang, speaker="shubh") or {}
                             if audio and audio.get("audios"):
                                 yield {"type": "audio_chunk", "audio": audio["audios"][0], "format": "wav"}
                 elif isinstance(event,ToolCallStartedEvent):
