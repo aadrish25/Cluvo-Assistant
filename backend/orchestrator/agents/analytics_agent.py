@@ -40,7 +40,7 @@ def create_analytics_agent():
           db=memory_db,
           add_history_to_context=True,
           num_history_runs=10,
-          add_session_state_to_context=True,
+        #   add_session_state_to_context=True,
           telemetry=DEBUG_MODE,
           debug_mode = DEBUG_MODE
         )

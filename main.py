@@ -145,7 +145,28 @@ async def poll_job(job_id: str, since: int = Query(0)):
 @app.get("/debug/traces")
 async def get_traces(limit:int=20):
     traces,total = traces_db.get_traces(limit=limit)
-    return {"total": total, "traces": [{"name": t.name, "duration_ms": t.duration_ms} for t in traces]}
+    return {
+        "total": total,
+        "traces": [
+            {
+                "trace_id": t.trace_id,
+                "name": t.name,
+                "status": t.status,
+                "duration_ms": round(t.duration_ms, 2),
+                "start_time": t.start_time.isoformat() if t.start_time else None,
+                "end_time": t.end_time.isoformat() if t.end_time else None,
+                "total_spans": t.total_spans,
+                "error_count": t.error_count,
+                "run_id": t.run_id,
+                "session_id": t.session_id,
+                "user_id": t.user_id,
+                "team_id": t.team_id,
+                "agent_id": t.agent_id,
+                "workflow_id": t.workflow_id,
+            }
+            for t in traces
+        ],
+    }
 
 
 if __name__ == "__main__":

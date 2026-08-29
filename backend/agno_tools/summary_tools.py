@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import re
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.append(str(PROJECT_ROOT))
@@ -7,9 +8,23 @@ sys.path.append(str(PROJECT_ROOT))
 from agno.run import RunContext
 from backend.database import create_connection
 from reportlab.lib.pagesizes import A4
+from xml.sax.saxutils import escape
 from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from backend.config import REPORTS_DIR
+
+
+
+def markdown_inline_to_reportlab(text: str) -> str:
+    """Convert basic markdown inline syntax to ReportLab's mini-HTML tags."""
+    # Escape XML special chars first so `<`/`&` in the text don't break Paragraph's parser
+    text = escape(text)
+    # **bold**
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    # *italic* (avoid matching the ** we just replaced, since <b> is already inserted by now)
+    text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text)
+    return text
+
 
 # build fir context
 def build_fir_context(fir_number:str,run_context:RunContext):
@@ -251,16 +266,16 @@ def save_summary_report_pdf(run_context:RunContext,report_text:str) -> str:
                 story.append(Spacer(1,10))
                 continue
             
-            if line.startswith("# "):
-                story.append(Paragraph(line[2:],styles["Title"]))
-            if line.startswith("## "):
-                story.append(Paragraph(line[3:],styles["Heading2"]))
             if line.startswith("### "):
-                story.append(Paragraph(line[4:],styles["Heading3"]))
+                story.append(Paragraph(markdown_inline_to_reportlab(line[4:]), styles["Heading3"]))
+            elif line.startswith("## "):
+                story.append(Paragraph(markdown_inline_to_reportlab(line[3:]), styles["Heading2"]))
+            elif line.startswith("# "):
+                story.append(Paragraph(markdown_inline_to_reportlab(line[2:]), styles["Title"]))
             elif line.startswith("- "):
-                story.append(Paragraph(f"• {line[2:]}",styles["BodyText"]))
+                story.append(Paragraph(f"• {markdown_inline_to_reportlab(line[2:])}", styles["BodyText"]))
             else:
-                story.append(Paragraph(line,styles["BodyText"]))
+                story.append(Paragraph(markdown_inline_to_reportlab(line), styles["BodyText"]))
                 
                 
             story.append(Spacer(1,6))
