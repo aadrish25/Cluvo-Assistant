@@ -18,6 +18,7 @@ def create_general_agent():
         return Agent(
           model = gemma4_31b,
           name = "General Agent",
+          id="general-agent",
           description = "An agent that handles general conversation,exchanges greetings and solves any ambiguity for the user.",
           system_message = GENERAL_AGENT_SYSTEM_PROMPT,
           tools=[ReasoningTools(add_instructions=True)],

@@ -26,6 +26,7 @@ def create_summary_agent():
         return Agent(
           model = gemma4_31b,
           name = "Summary Agent",
+          id="summary-agent",
           description = "An agent that summarizes and generates a report for a FIR on the KSP Crime Database.",
           system_message = SUMMARY_AGENT_SYSTEM_PROMPT,
           tools = [

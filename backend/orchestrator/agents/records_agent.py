@@ -20,6 +20,7 @@ def create_records_agent():
         return Agent(
             model = gemma4_31b,
             name = "Records Agent",
+            id="records-agent",
             description = "Answers questions from uploaded FIR report documents by retrieving relevant text directly from the case files.",
             system_message = RECORDS_AGENT_SYSTEM_PROMPT,
             tools=[search_fir_knowledge,ReasoningTools(add_instructions=True)],

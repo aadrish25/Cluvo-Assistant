@@ -28,6 +28,7 @@ def create_sql_agent()->Agent:
     try:
         return Agent(
           model = gemma4_31b,
+          id="sql-agent",
           name = "Text to SQL Agent",
           description = "An agent that converts natural language questions into SQL queries for the KSP Crime Database.",
           system_message = TEXT_TO_SQL_AGENT_SYSTEM_PROMPT,

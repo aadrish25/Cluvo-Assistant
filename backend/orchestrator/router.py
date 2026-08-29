@@ -2,6 +2,7 @@ from agno.team import Team,TeamMode
 from agno.run.team import RunCompletedEvent,RunContentEvent,ToolCallStartedEvent,RunErrorEvent
 from agno.tools.reasoning import ReasoningTools
 from agno.db.sqlite import SqliteDb
+import random
 import sys
 import re
 from pathlib import Path
@@ -19,7 +20,7 @@ from backend.orchestrator.agents.summary_agent import create_summary_agent
 from backend.orchestrator.agents.general_agent import create_general_agent
 from backend.orchestrator.agents.records_agent import create_records_agent
 from backend.services.sarvam import SarvamTranslationLayer
-from backend.config import AGENT_STATUS_LABELS,DELEGATE_TOOL_NAMES,DEBUG_MODE
+from backend.config import DELEGATE_TOOL_NAMES,TOOL_STATUS_LABELS,DEBUG_MODE,GENERIC_STATUS_MESSAGES
 from dataclasses import asdict
 from backend.database import memory_db
 
@@ -41,10 +42,43 @@ class InvestigationTeam:
         self.translation_layer = SarvamTranslationLayer()
         self.sqlite_db = memory_db
         
+        print(f"[INVESTIGATOR TEAM] Initialized team with members: {self.sql_agent.id},{self.graph_agent.id},{self.analytics_agent.id},{self.summary_agent.id},{self.general_agent.id},{self.records_agent.id}")
         
-        self._agent_status_labels = AGENT_STATUS_LABELS
+        self._agent_status_labels = {
+            self.sql_agent.id: [
+            "Querying the case database",
+            "Digging through case records",
+            "Running the search against FIRs",
+            ],
+            self.graph_agent.id: [
+            "Mapping out the network",
+            "Tracing connections between people",
+            "Building out the relationship graph",
+            ],
+            self.analytics_agent.id: [
+            "Crunching the numbers",
+            "Running the analytics",
+            "Working out the trends",
+            ],
+            self.summary_agent.id: [
+            "Putting together a summary",
+            "Drafting the case summary",
+            "Writing it up",
+            ],
+            self.general_agent.id: [
+            "Thinking it through",
+            "Working out the best answer",
+            ],
+            self.records_agent.id: [
+            "Pulling up past records",
+            "Checking historical case files",
+            "Looking through old records",
+            ],
+            }
 
         self._delegate_tool_names = DELEGATE_TOOL_NAMES
+        self._generic_status_messages = GENERIC_STATUS_MESSAGES
+        self.tool_status_labels = TOOL_STATUS_LABELS
         
         self.team = Team(
                 model = gemma4_31b,
@@ -69,6 +103,13 @@ class InvestigationTeam:
             return self.team.get_session_state(session_id=session_id) or {}
         except Exception:
             return {}
+        
+    def _pick_status(self, options) -> str:
+        if isinstance(options, list) and options:
+            return random.choice(options)
+        if isinstance(options, str):
+            return options
+        return random.choice(self._generic_status_messages)
     
     def initialize_session(self, user_id: str, session_id: str):
         # Agno only creates the session row on the first arun()/run() call —
@@ -326,14 +367,16 @@ class InvestigationTeam:
                     
                     if tool_name in self._delegate_tool_names:
                         member_id = tool_args.get("member_id")
+                        print(f"[INVESTIGATOR TEAM] Member id : {member_id}\n")
                         task = tool_args.get("task")
-                        label = self._agent_status_labels.get(member_id,member_id or "a specialist agent")
-                        message = f"{label} — {task}" if task else f"{label}..."
+                        label = self._pick_status(self._agent_status_labels.get(member_id))
+                        message = f"{label}..."
                         yield {"type":"status","message":message}
                     else:
+                        label = self._pick_status(self.tool_status_labels.get(tool_name))
                         yield {
                         "type":"status",
-                        "message": f"Running {tool_name or 'a tool'}...",
+                        "message": label,
                         }
                 elif isinstance(event, RunErrorEvent):
                     yield {"type": "error", "message": str(getattr(event, "error", "Something went wrong."))}

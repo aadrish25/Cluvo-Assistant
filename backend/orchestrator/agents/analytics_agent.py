@@ -24,6 +24,7 @@ def create_analytics_agent():
         return Agent(
           model = gemma4_31b,
           name = "Analytics Agent",
+          id="analytics-agent",
           description = "Computes crime trends, rankings, breakdowns, and hotspot analytics from the KSP crime database.",
           system_message = ANALYTICS_AGENT_SYSTEM_PROMPT,
           tools = [

@@ -22,6 +22,7 @@ def create_graph_agent():
     try:
         return Agent(
           model = gemma4_31b,
+          id="graph-agent",
           name = "Graph Agent",
           description = "An agent that builds and saves relationship graphs, for a person on the KSP Crime Database.",
           system_message = GRAPH_AGENT_SYSTEM_PROMPT,
