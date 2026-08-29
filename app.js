@@ -762,11 +762,7 @@ function renderActiveSessionTranscript() {
   clearStreamingMessage();
 
   const cached = loadCachedMessages(sessionId);
-  if (!cached.length) {
-    addMessage("assistant", "Cluvo is ready. Ask about FIRs, people, networks, trends, hotspots, or case reports.");
-  } else {
-    cached.forEach((m) => addMessage(m.role, m.content));
-  }
+  cached.forEach((m) => addMessage(m.role, m.content));
 }
 
 function switchSession(newSessionId) {
