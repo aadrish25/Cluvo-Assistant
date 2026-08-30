@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Cluvo")
+app = FastAPI(title="Cluvo",lifespan=lifespan)
 print("FastAPI app created")
 app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
 app.mount("/graph_artifacts", StaticFiles(directory=str(GRAPH_DIR)), name="graph_artifacts")
@@ -57,8 +57,6 @@ print("Tracing initialized")
 
 initialized_sessions = set()
 job_store: dict[str, dict] = {}  # job_id -> {"events": [...], "done": bool}
-
-print("InvestigationTeam initialized")
 
 
 
