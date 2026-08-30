@@ -6,7 +6,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # print(PROJECT_ROOT)
 sys.path.append(str(PROJECT_ROOT))
 
-from agno.knowledge.embedder.sentence_transformer import SentenceTransformerEmbedder
+from agno.knowledge.embedder.cohere import CohereEmbedder
 from agno.run import RunContext
 from agno.knowledge import Knowledge
 from agno.vectordb.lancedb import LanceDb
@@ -37,7 +37,7 @@ def get_knowledge() -> Knowledge:
                 uri=LANCE_DB,
                 table_name="fir_reports",
                 search_type=SearchType.hybrid,
-                embedder=SentenceTransformerEmbedder(id="sentence-transformers/all-MiniLM-L6-v2",dimensions=384),
+                embedder=CohereEmbedder(dimensions=384,id="embed-english-light-v3.0"),
                 reranker=CohereReranker(model="rerank-v3.5"),
             ),
             max_results=5,
