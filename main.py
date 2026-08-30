@@ -2,16 +2,38 @@ import asyncio
 import base64
 import uuid
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query
 from agno.tracing import setup_tracing
 from agno.db.sqlite import SqliteDb
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from backend.orchestrator.router import InvestigationTeam
 from backend.config import REPORTS_DIR, GRAPH_DIR, LISTEN_PORT,TRACES_DB
 import uvicorn
 
 print("========== MAIN.PY STARTING ==========")
+
+team = None
+team_ready = asyncio.Event()
+
+async def init_team_background():
+    global team
+    try:
+        print("[INIT] Starting InvestigationTeam initialization in background...")
+        from backend.orchestrator.router import InvestigationTeam
+        loop = asyncio.get_event_loop()
+        team = await loop.run_in_executor(None, InvestigationTeam)
+        print("[INIT] InvestigationTeam initialized successfully")
+    except Exception as e:
+        print(f"[INIT] FAILED to initialize InvestigationTeam: {e}")
+    finally:
+        team_ready.set()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(init_team_background())
+    yield
+
 
 app = FastAPI(title="Cluvo")
 print("FastAPI app created")
@@ -32,11 +54,12 @@ setup_tracing(db=traces_db)
 print("Tracing initialized")
 
 
-team = InvestigationTeam()
+
 initialized_sessions = set()
 job_store: dict[str, dict] = {}  # job_id -> {"events": [...], "done": bool}
 
 print("InvestigationTeam initialized")
+
 
 
 def initialize_chat_session(user_id: str, session_id: str):
@@ -70,6 +93,10 @@ def build_ws_response(final_event):
 
 async def run_text_job(job_id: str, message: str, user_id: str, session_id: str):
     try:
+        await team_ready.wait()
+        if team is None:
+            job_store[job_id]["events"].append({"type": "error", "message": "Service still starting up, try again shortly."})
+            return
         async for chunk in team.team_run_stream_from_text(message, user_id, session_id):
             job_store[job_id]["events"].append(chunk)
     except Exception as e:
@@ -81,6 +108,10 @@ async def run_text_job(job_id: str, message: str, user_id: str, session_id: str)
 
 async def run_audio_job(job_id: str, audio_bytes: bytes, user_id: str, session_id: str, mime_type: str):
     try:
+        await team_ready.wait()
+        if team is None:
+            job_store[job_id]["events"].append({"type": "error", "message": "Service still starting up, try again shortly."})
+            return
         async for chunk in team.team_run_stream_from_audio(audio_bytes, session_id, user_id, mime_type):
             job_store[job_id]["events"].append(chunk)
     except Exception as e:
@@ -92,7 +123,7 @@ async def run_audio_job(job_id: str, audio_bytes: bytes, user_id: str, session_i
         
 @app.get("/")
 def root():
-    return {"status": "ok"}
+    return {"status": "ok","team_ready":team_ready.is_set()}
 
 
 @app.post("/chat/message")
@@ -104,7 +135,8 @@ async def start_text_job(payload: dict):
     if not user_id or not session_id or not message:
         return {"error": "user_id, session_id, and message are required."}
 
-    initialize_chat_session(user_id=user_id, session_id=session_id)
+    if team is not None:
+        initialize_chat_session(user_id=user_id, session_id=session_id)
 
     job_id = str(uuid.uuid4())
     job_store[job_id] = {"events": [], "done": False}
@@ -123,7 +155,8 @@ async def start_voice_job(payload: dict):
     if not user_id or not session_id or not audio_b64:
         return {"error": "user_id, session_id, and audio are required."}
 
-    initialize_chat_session(user_id=user_id, session_id=session_id)
+    if team is not None:
+        initialize_chat_session(user_id=user_id, session_id=session_id)
 
     audio_bytes = base64.b64decode(audio_b64)
     job_id = str(uuid.uuid4())
