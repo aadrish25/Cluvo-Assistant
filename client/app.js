@@ -3,15 +3,15 @@ const isLocal =
     window.location.hostname === "127.0.0.1";
 
 const API_BASE = isLocal
-    ? "http://localhost:9000"
-    : "https://cluvo-backend-50043877564.development.catalystappsail.in";
+    ? "http://localhost:8000"
+    : "https://cluvop2-50045396230.development.catalystappsail.in/";
 
 
 const CHART_COLORS = ["#2563eb", "#0f9f6e", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2"];
 
 const state = {
   activePanel: "report",
-  statusNode: null,
+  statusTrail: null,
   streamingNode: null,
   streamingText: "",
   artifacts: {
@@ -22,6 +22,44 @@ const state = {
     table: [],
   },
 };
+
+
+const OFFICER_NAME_KEY = "cluvo-officer-name";
+const OFFICER_ID_KEY = "cluvo-user-id";
+
+function slugify(name) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 40);
+}
+
+function shortSuffix() {
+  return crypto.randomUUID().slice(0, 4);
+}
+
+function loadIdentity() {
+  const name = localStorage.getItem(OFFICER_NAME_KEY);
+  const id = localStorage.getItem(OFFICER_ID_KEY);
+  if (name && id) return { name, id };
+  return null;
+}
+
+function saveIdentity(name) {
+  const slug = slugify(name) || "officer";
+  const id = `${slug}-${shortSuffix()}`;
+  localStorage.setItem(OFFICER_NAME_KEY, name.trim());
+  localStorage.setItem(OFFICER_ID_KEY, id);
+  return { name: name.trim(), id };
+}
+
+function clearIdentity() {
+  localStorage.removeItem(OFFICER_NAME_KEY);
+  localStorage.removeItem(OFFICER_ID_KEY);
+}
+
 
 const audioQueue = [];
 let isPlayingAudio = false;
@@ -48,6 +86,10 @@ const els = {
   reconnectBtn: document.querySelector("#reconnectBtn"),
   newChatBtn: document.querySelector("#newChatBtn"),
   sessionList: document.querySelector("#sessionList"),
+  identityModal: document.querySelector("#identityModal"),
+  officerNameInput: document.querySelector("#officerNameInput"),
+  officerNameSubmit: document.querySelector("#officerNameSubmit"),
+  editIdentityBtn: document.querySelector("#editIdentityBtn"),
 };
 
 if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -57,13 +99,7 @@ if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
 
 
 
-function stableId(key) {
-  const existing = localStorage.getItem(key);
-  if (existing) return existing;
-  const value = `${key}-${crypto.randomUUID()}`;
-  localStorage.setItem(key, value);
-  return value;
-}
+
 
 
 function enqueueAudio(base64, format = "wav") {
@@ -90,6 +126,53 @@ function blobToBase64(blob) {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+}
+
+function renderMarkdown(text) {
+  const escaped = escapeHtml(text);
+
+  const lines = escaped.split("\n");
+  const htmlParts = [];
+  let inList = false;
+
+  for (let rawLine of lines) {
+    let line = rawLine;
+
+    // headings: ### / ## / #
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      if (inList) { htmlParts.push("</ul>"); inList = false; }
+      const level = Math.min(headingMatch[1].length, 6);
+      htmlParts.push(`<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    // bullet list items: - or *
+    const bulletMatch = line.match(/^[-*]\s+(.*)$/);
+    if (bulletMatch) {
+      if (!inList) { htmlParts.push("<ul>"); inList = true; }
+      htmlParts.push(`<li>${inlineMarkdown(bulletMatch[1])}</li>`);
+      continue;
+    }
+
+    if (inList) { htmlParts.push("</ul>"); inList = false; }
+
+    if (line.trim() === "") {
+      htmlParts.push("<p></p>");
+    } else {
+      htmlParts.push(`<p>${inlineMarkdown(line)}</p>`);
+    }
+  }
+
+  if (inList) htmlParts.push("</ul>");
+
+  return htmlParts.join("");
+}
+
+function inlineMarkdown(line) {
+  return line
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")  // **bold**
+    .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, "<em>$1</em>"); // *italic* (not part of **)
 }
 
 
@@ -171,8 +254,51 @@ async function checkBackendReachable() {
   }
 }
 
+let userId;
+let officerName;
 
-const userId = stableId("cluvo-user");
+function applyIdentity(identity) {
+  userId = identity.id;
+  officerName = identity.name;
+  els.userIdView.textContent = officerName;
+  els.identityModal.classList.add("hidden");
+}
+
+function promptForIdentity() {
+  els.identityModal.classList.remove("hidden");
+  els.officerNameInput.value = "";
+  els.officerNameInput.focus();
+}
+
+function initIdentity() {
+  const existing = loadIdentity();
+  if (existing) {
+    applyIdentity(existing);
+  } else {
+    promptForIdentity();
+  }
+}
+
+els.officerNameSubmit.addEventListener("click", () => {
+  const name = els.officerNameInput.value.trim();
+  if (!name) {
+    els.officerNameInput.focus();
+    return;
+  }
+  const identity = saveIdentity(name);
+  applyIdentity(identity);
+});
+
+els.officerNameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") els.officerNameSubmit.click();
+});
+
+els.editIdentityBtn.addEventListener("click", () => {
+  clearIdentity();
+  promptForIdentity();
+});
+
+initIdentity();
 
 const SESSIONS_KEY = "cluvo-sessions";
 const ACTIVE_SESSION_KEY = "cluvo-active-session";
@@ -246,7 +372,6 @@ function initSessionId() {
 
 initSessionId();
 
-els.userIdView.textContent = userId.replace("cluvo-user-", "").slice(0, 8);
 els.sessionIdView.textContent = sessionId.replace("cluvo-session-", "").slice(0, 8);
 
 
@@ -263,10 +388,7 @@ function addMessage(role, content) {
   const message = document.createElement("article");
   message.className = `message ${role}`;
   const avatarText = role === "assistant" ? "C" : "U";
-  const safeLines = String(content || "")
-    .split("\n")
-    .map((line) => `<p>${escapeHtml(line || " ")}</p>`)
-    .join("");
+  const safeLines = renderMarkdown(String(content || ""));
   message.innerHTML = `
     <div class="avatar">${avatarText}</div>
     <div class="bubble">${safeLines}</div>
@@ -276,27 +398,43 @@ function addMessage(role, content) {
 }
 
 function showChatStatus(content) {
-  const label = content || "Figuring";
+  const label = content || "Working on it...";
 
-  if (!state.statusNode) {
-    const statusNode = document.createElement("article");
-    statusNode.className = "chat-status";
-    statusNode.innerHTML = `
-      <span class="chat-status-dot"></span>
-      <span class="chat-status-text"></span>
-    `;
-    els.transcript.appendChild(statusNode);
-    state.statusNode = statusNode;
+  if (!state.statusTrail) {
+    const trail = document.createElement("div");
+    trail.className = "status-trail";
+    els.transcript.appendChild(trail);
+    state.statusTrail = trail;
   }
 
-  state.statusNode.querySelector(".chat-status-text").textContent = label;
+  // freeze the previous step as "done"
+  const prevActive = state.statusTrail.querySelector(".status-step:not(.done)");
+  if (prevActive) {
+    prevActive.classList.add("done");
+    prevActive.querySelector(".status-step-icon").textContent = "✓";
+  }
+
+  // don't add a duplicate row if the same status fires twice in a row
+  const lastStep = state.statusTrail.lastElementChild;
+  if (lastStep && lastStep.dataset.label === label) {
+    els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });
+    return;
+  }
+
+  const step = document.createElement("div");
+  step.className = "status-step";
+  step.dataset.label = label;
+  step.innerHTML = `<span class="status-step-icon"></span><span class="status-step-text"></span>`;
+  step.querySelector(".status-step-text").textContent = label;
+  state.statusTrail.appendChild(step);
+
   els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });
 }
 
 function clearChatStatus() {
-  if (!state.statusNode) return;
-  state.statusNode.remove();
-  state.statusNode = null;
+  if (!state.statusTrail) return;
+  state.statusTrail.remove();
+  state.statusTrail = null;
 }
 
 function ensureStreamingMessage() {
@@ -320,10 +458,7 @@ function appendStreamChunk(content) {
   const node = ensureStreamingMessage();
   state.streamingText += content;
 
-  const safeLines = state.streamingText
-    .split("\n")
-    .map((line) => `<p>${escapeHtml(line || " ")}</p>`)
-    .join("");
+  const safeLines = renderMarkdown(state.streamingText);  // use accumulated text
   node.querySelector(".bubble").innerHTML = safeLines;
 
   els.transcript.scrollTo({ top: els.transcript.scrollHeight, behavior: "smooth" });
@@ -721,11 +856,7 @@ function renderActiveSessionTranscript() {
   clearStreamingMessage();
 
   const cached = loadCachedMessages(sessionId);
-  if (!cached.length) {
-    addMessage("assistant", "Cluvo is ready. Ask about FIRs, people, networks, trends, hotspots, or case reports.");
-  } else {
-    cached.forEach((m) => addMessage(m.role, m.content));
-  }
+  cached.forEach((m) => addMessage(m.role, m.content));
 }
 
 function switchSession(newSessionId) {
